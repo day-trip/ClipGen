@@ -1,0 +1,17 @@
+apiVersion: keda.sh/v1alpha1
+kind: ScaledObject
+metadata:
+  name: inference-worker-scaler
+spec:
+  scaleTargetRef:
+    name: inference-worker
+  minReplicaCount: {{ .Values.scaling.minReplicas }}
+  maxReplicaCount: {{ .Values.scaling.maxReplicas }}
+  triggers:
+    - type: aws-sqs-queue
+      authenticationRef:
+        name: keda-aws-credentials
+      metadata:
+        queueURL: {{ .Values.aws.queueUrl }}
+        queueLength: {{ .Values.scaling.queueLength | quote }}
+        awsRegion: {{ .Values.aws.region }}

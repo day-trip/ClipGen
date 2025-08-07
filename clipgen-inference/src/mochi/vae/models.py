@@ -6,9 +6,9 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-import genmo.mochi.dit.context_parallel as cp
-from genmo.mochi.lib.progress import get_new_progress_bar
-from genmo.mochi.vae.cp_conv import cp_pass_frames, gather_all_frames
+import mochi.dit.context_parallel as cp
+from mochi.lib.progress import get_new_progress_bar
+from mochi.vae.cp_conv import cp_pass_frames, gather_all_frames
 
 
 def cast_tuple(t, length=1):

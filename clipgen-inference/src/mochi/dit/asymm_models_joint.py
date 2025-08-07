@@ -8,24 +8,24 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch.nn.attention import sdpa_kernel
 
-import genmo.mochi.dit.context_parallel as cp
-from genmo.mochi.lib.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
-from genmo.mochi.dit.layers import (
+import mochi.dit.context_parallel as cp
+from mochi.lib.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
+from mochi.dit.layers import (
     FeedForward,
     PatchEmbed,
     RMSNorm,
     TimestepEmbedder,
 )
-from genmo.mochi.dit.mod_rmsnorm import modulated_rmsnorm
-from genmo.mochi.dit.residual_tanh_gated_rmsnorm import (
+from mochi.dit.mod_rmsnorm import modulated_rmsnorm
+from mochi.dit.residual_tanh_gated_rmsnorm import (
     residual_tanh_gated_rmsnorm,
 )
-from genmo.mochi.dit.rope_mixed import (
+from mochi.dit.rope_mixed import (
     compute_mixed_rotation,
     create_position_matrix,
 )
-from genmo.mochi.dit.temporal_rope import apply_rotary_emb_qk_real
-from genmo.mochi.dit.utils import (
+from mochi.dit.temporal_rope import apply_rotary_emb_qk_real
+from mochi.dit.utils import (
     AttentionPool,
     modulate,
     pad_and_split_xy,

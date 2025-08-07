@@ -26,16 +26,14 @@ from torch.distributed.fsdp.wrap import (
 from transformers import T5EncoderModel, T5Tokenizer
 from transformers.models.t5.modeling_t5 import T5Block
 
-import genmo.mochi.dit.context_parallel as cp
-from genmo.mochi.lib.progress import get_new_progress_bar, progress_bar
-from genmo.mochi.lib.utils import Timer
-from genmo.mochi.vae.models import (
+import mochi.dit.context_parallel as cp
+from mochi.lib.progress import get_new_progress_bar, progress_bar
+from mochi.lib.utils import Timer
+from mochi.vae.models import (
     Decoder,
     decode_latents,
-    decode_latents_tiled_full,
-    decode_latents_tiled_spatial,
 )
-from genmo.mochi.vae.vae_stats import dit_latents_to_vae_latents
+from mochi.vae.vae_stats import dit_latents_to_vae_latents
 
 
 def load_to_cpu(p, weights_only=True):
@@ -44,6 +42,23 @@ def load_to_cpu(p, weights_only=True):
     else:
         assert p.endswith(".pt")
         return torch.load(p, map_location="cpu", weights_only=weights_only)
+
+
+def linear_quadratic_schedule(num_steps, threshold_noise, linear_steps=None):
+    if linear_steps is None:
+        linear_steps = num_steps // 2
+    linear_sigma_schedule = [i * threshold_noise / linear_steps for i in range(linear_steps)]
+    threshold_noise_step_diff = linear_steps - threshold_noise * num_steps
+    quadratic_steps = num_steps - linear_steps
+    quadratic_coef = threshold_noise_step_diff / (linear_steps * quadratic_steps**2)
+    linear_coef = threshold_noise / linear_steps - 2 * threshold_noise_step_diff / (quadratic_steps**2)
+    const = quadratic_coef * (linear_steps**2)
+    quadratic_sigma_schedule = [
+        quadratic_coef * (i**2) + linear_coef * i + const for i in range(linear_steps, num_steps)
+    ]
+    sigma_schedule = linear_sigma_schedule + quadratic_sigma_schedule + [1.0]
+    sigma_schedule = [1.0 - x for x in sigma_schedule]
+    return sigma_schedule
 
 
 T5_MODEL = "google/t5-v1_1-xxl"
@@ -116,7 +131,7 @@ class DitModelFactory(ModelFactory):
     ):
         # Infer attention mode if not specified
         if attention_mode is None:
-            from genmo.mochi.lib.attn_imports import flash_varlen_attn  # type: ignore
+            from mochi.lib.attn_imports import flash_varlen_attn  # type: ignore
             attention_mode = "sdpa" if flash_varlen_attn is None else "flash"
         print(f"Attention mode: {attention_mode}")
 
@@ -138,7 +153,7 @@ class DitModelFactory(ModelFactory):
         load_checkpoint=True,
         fast_init=True,
     ):
-        from genmo.mochi.dit.asymm_models_joint import AsymmDiTJoint
+        from mochi.dit.asymm_models_joint import AsymmDiTJoint
 
         if not model_kwargs:
             model_kwargs = {}

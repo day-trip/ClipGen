@@ -1,78 +1,87 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: {{ include "deploy.fullname" . }}
+  name: inference-worker
   labels:
-    {{- include "deploy.labels" . | nindent 4 }}
+    app: inference-worker
 spec:
-  {{- if not .Values.autoscaling.enabled }}
-  replicas: {{ .Values.replicaCount }}
-  {{- end }}
+  replicas: {{ .Values.scaling.minReplicas }}
   selector:
     matchLabels:
-      {{- include "deploy.selectorLabels" . | nindent 6 }}
+      app: inference-worker
   template:
     metadata:
-      {{- with .Values.podAnnotations }}
-      annotations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       labels:
-        {{- include "deploy.labels" . | nindent 8 }}
-        {{- with .Values.podLabels }}
-        {{- toYaml . | nindent 8 }}
-        {{- end }}
+        app: inference-worker
     spec:
-      {{- with .Values.imagePullSecrets }}
+      {{- with .Values.image.pullSecrets }}
       imagePullSecrets:
         {{- toYaml . | nindent 8 }}
       {{- end }}
-      serviceAccountName: {{ include "deploy.serviceAccountName" . }}
-      {{- with .Values.podSecurityContext }}
-      securityContext:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
       containers:
-        - name: {{ .Chart.Name }}
-          {{- with .Values.securityContext }}
-          securityContext:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          image: "{{ .Values.image.repository }}:{{ .Values.image.tag | default .Chart.AppVersion }}"
-          imagePullPolicy: {{ .Values.image.pullPolicy }}
+        - name: worker
+          image: "{{ .Values.image.repository }}:{{ .Values.image.tag }}"
+          imagePullPolicy: IfNotPresent
           ports:
-            - name: http
-              containerPort: {{ .Values.service.port }}
-              protocol: TCP
-          {{- with .Values.livenessProbe }}
+            - containerPort: 8000
+              name: metrics
+          env:
+            - name: AWS_ACCESS_KEY_ID
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: AWS_ACCESS_KEY_ID
+            - name: AWS_SECRET_ACCESS_KEY
+              valueFrom:
+                secretKeyRef:
+                  name: aws-credentials
+                  key: AWS_SECRET_ACCESS_KEY
+            - name: AWS_DEFAULT_REGION
+              value: {{ .Values.aws.region | quote }}
+            - name: SQS_QUEUE_URL
+              value: {{ .Values.aws.queueUrl | quote }}
+            - name: JOB_TABLE_NAME
+              value: {{ .Values.aws.jobTableName | quote }}
+            - name: MEDIA_BUCKET_NAME
+              value: {{ .Values.aws.mediaBucketName | quote }}
+            - name: MAX_CONCURRENT_JOBS
+              value: {{ .Values.worker.maxConcurrentJobs | quote }}
+            - name: CUDA_VISIBLE_DEVICES
+              value: {{ .Values.worker.cudaVisibleDevices | quote }}
+            - name: MODEL_TYPE
+              value: "mochi"
+
+          # BIG TIMEOUTS FOR MODEL LOADING
+          startupProbe:
+            httpGet:
+              path: /metrics  # Prometheus endpoint
+              port: 8000
+            initialDelaySeconds: 60
+            periodSeconds: 30
+            timeoutSeconds: 10
+            failureThreshold: 30  # 15 minutes total for runtime installation
           livenessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.readinessProbe }}
-          readinessProbe:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.resources }}
-          resources:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-          {{- with .Values.volumeMounts }}
+            httpGet:
+              path: /metrics
+              port: 8000
+            initialDelaySeconds: 600  # 10 minutes after startup
+            periodSeconds: 60
+            timeoutSeconds: 30
+            failureThreshold: 3
           volumeMounts:
-            {{- toYaml . | nindent 12 }}
-          {{- end }}
-      {{- with .Values.volumes }}
+            - name: model-storage
+              mountPath: /tmp/mochi_models
+            - name: shm
+              mountPath: /dev/shm
+          resources:
+{{ toYaml .Values.resources | indent 12 }}
       volumes:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.nodeSelector }}
+        - name: model-storage
+          persistentVolumeClaim:
+            claimName: mochi-models-pvc
+        - name: shm
+          emptyDir:
+            medium: Memory
+            sizeLimit: {{ .Values.resources.shmSize | default "32Gi" }}
       nodeSelector:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.affinity }}
-      affinity:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
-      {{- with .Values.tolerations }}
-      tolerations:
-        {{- toYaml . | nindent 8 }}
-      {{- end }}
+{{ toYaml .Values.nodeSelector | indent 8 }}

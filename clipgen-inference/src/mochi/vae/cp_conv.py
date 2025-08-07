@@ -1,10 +1,8 @@
-from typing import Tuple, Union
-
 import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 
-import genmo.mochi.dit.context_parallel as cp
+import mochi.dit.context_parallel as cp
 
 
 def cast_tuple(t, length=1):

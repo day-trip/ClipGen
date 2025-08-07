@@ -16,7 +16,7 @@ export class StorageConstruct extends Construct {
         const removalPolicy = props.removalPolicy ?? cdk.RemovalPolicy.DESTROY;
 
         this.mediaBucket = new s3.Bucket(this, 'MediaBucket', {
-            bucketName: `clipgen-media-${cdk.Stack.of(this).account}-${cdk.Stack.of(this).region}`,
+            bucketName: 'clipgen-media',
             versioned: false,
             publicReadAccess: false,
             blockPublicAccess: s3.BlockPublicAccess.BLOCK_ALL,

@@ -1,0 +1,200 @@
+openapi: 3.0.3
+info:
+  title: Clipgen API
+  description: Generate short video clips from your prompts
+  version: 1.0.0
+
+servers:
+  - url: https://api.clipgen.ai/v1
+    description: Production API
+
+paths:
+  /jobs:
+    post:
+      summary: Create a new video generation job
+      operationId: createJob
+      requestBody:
+        required: true
+        content:
+          application/json:
+            schema:
+              type: object
+              required: [prompt]
+              properties:
+                prompt:
+                  type: string
+                  description: Text prompt describing the desired video content
+                  example: "A person speaking with excitement and gesticulating enthusiastically"
+                  minLength: 1
+                  maxLength: 1000
+                height:
+                  type: integer
+                  description: Video height in pixels (must be divisible by 32)
+                  minimum: 256
+                  maximum: 2048
+                  default: 512
+                width:
+                  type: integer
+                  description: Video width in pixels (must be divisible by 32)
+                  minimum: 256
+                  maximum: 2048
+                  default: 512
+                num_frames:
+                  type: integer
+                  description: Number of frames to generate
+                  minimum: 1
+                  maximum: 300
+                  default: 65
+                frame_rate:
+                  type: integer
+                  description: Video frame rate (fps)
+                  enum: [1, 12, 15, 24, 25, 30, 48, 50, 60]
+                  default: 24
+                seed:
+                  type: integer
+                  description: Random seed for reproducible results
+                  minimum: 0
+                  maximum: 2147483647
+                negative_prompt:
+                  type: string
+                  description: Negative prompt to avoid unwanted elements
+                  maxLength: 500
+                  default: "worst quality, inconsistent motion, blurry, jittery, distorted"
+      responses:
+        '201':
+          description: Job created successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '400':
+          $ref: '#/components/responses/BadRequest'
+        '429':
+          $ref: '#/components/responses/RateLimit'
+      security:
+        - ApiKeyAuth: []
+
+    get:
+      summary: List user's jobs
+      operationId: listJobs
+      parameters:
+        - name: limit
+          in: query
+          schema:
+            type: integer
+            minimum: 1
+            maximum: 100
+            default: 20
+        - name: cursor
+          in: query
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Jobs retrieved successfully
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobList'
+      security:
+        - ApiKeyAuth: []
+
+  /jobs/{jobId}:
+    get:
+      summary: Get job status and results
+      operationId: getJob
+      parameters:
+        - name: jobId
+          in: path
+          required: true
+          schema:
+            type: string
+      responses:
+        '200':
+          description: Job details
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/JobResponse'
+        '404':
+          $ref: '#/components/responses/NotFound'
+      security:
+        - ApiKeyAuth: []
+
+components:
+  securitySchemes:
+    ApiKeyAuth:
+      type: apiKey
+      in: header
+      name: X-API-Key
+
+  schemas:
+    JobResponse:
+      type: object
+      required: [jobId, status, createdAt]
+      properties:
+        jobId:
+          type: string
+          example: "job_abc123"
+        status:
+          type: string
+          enum: [queued, processing, completed, failed]
+        videoUrl:
+          type: string
+          nullable: true
+          description: Download URL for generated MP4 video (null until completed)
+        createdAt:
+          type: string
+          format: date-time
+        completedAt:
+          type: string
+          format: date-time
+          nullable: true
+
+    JobList:
+      type: object
+      properties:
+        jobs:
+          type: array
+          items:
+            $ref: '#/components/schemas/JobResponse'
+        nextCursor:
+          type: string
+          nullable: true
+
+  responses:
+    BadRequest:
+      description: Invalid request
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Invalid audio format"
+
+    RateLimit:
+      description: Rate limit exceeded
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Rate limit exceeded. Try again in 60 seconds."
+
+    NotFound:
+      description: Resource not found
+      content:
+        application/json:
+          schema:
+            type: object
+            properties:
+              error:
+                type: string
+                example: "Job not found"
+
+security:
+  - ApiKeyAuth: []
