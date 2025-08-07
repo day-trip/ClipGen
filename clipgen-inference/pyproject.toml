@@ -1,0 +1,25 @@
+[project]
+name = "clipgen-inference"
+version = "0.1.0"
+description = "Deployment code for Mochi-1 on VoltagePark's managed Kubernetes"
+readme = "README.md"
+requires-python = ">=3.10"
+
+dependencies = [
+    "av==13.1.0",
+    "einops>=0.8.0",
+    "moviepy==1.0.3",
+    "ray>=2.37.0",
+    "sentencepiece>=0.2.0",
+    "setuptools>=75.2.0",
+    "torch>=2.4.1",
+    "torchvision>=0.19.1",
+    "transformers>=4.45.2",
+]
+
+[project.optional-dependencies]
+flash = ["flash-attn>=2.6.3"]
+
+[tool.ruff]
+# Allow lines to be as long as 120.
+line-length = 120
