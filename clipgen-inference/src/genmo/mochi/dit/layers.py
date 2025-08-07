@@ -77,7 +77,6 @@ class FeedForward(nn.Module):
             hidden_size = int(ffn_dim_multiplier * hidden_size)
         hidden_size = multiple_of * ((hidden_size + multiple_of - 1) // multiple_of)
 
-        self.hidden_dim = hidden_size
         self.w1 = nn.Linear(in_features, 2 * hidden_size, bias=False, device=device)
         self.w2 = nn.Linear(hidden_size, in_features, bias=False, device=device)
 

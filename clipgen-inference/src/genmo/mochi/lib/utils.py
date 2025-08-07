@@ -27,7 +27,7 @@ class Timer:
             self.start_time = time.perf_counter()
             return self
 
-        def __exit__(self, exc_type, exc_value, traceback):
+        def __exit__(self, _exc_type, _exc_value, _traceback):
             end_time = time.perf_counter()
             elapsed = end_time - self.start_time
             self.outer.times[self.name] = self.outer.times.get(self.name, 0) + elapsed
