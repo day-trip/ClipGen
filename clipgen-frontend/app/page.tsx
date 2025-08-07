@@ -1,5 +1,7 @@
-'use server';
+import {redirectIfAuthenticated} from "@/app/lib/auth-check";
+import {redirect} from "next/navigation";
 
 export default async function Home() {
-  return <h1>ClipGen</h1>
+  await redirectIfAuthenticated();
+  redirect("/auth/signin");
 }

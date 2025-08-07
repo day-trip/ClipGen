@@ -5,6 +5,7 @@ import {StorageConstruct} from './constructs/storage';
 import {MessagingConstruct} from './constructs/messaging';
 import {ApiConstruct} from './constructs/api';
 import {AuthConstruct} from './constructs/auth';
+import {WebSocketConstruct} from "./constructs/websocket";
 
 export class ClipgenInfrastructureStack extends cdk.Stack {
   constructor(scope: Construct, id: string, props?: cdk.StackProps) {
@@ -29,7 +30,13 @@ export class ClipgenInfrastructureStack extends cdk.Stack {
       removalPolicy: cdk.RemovalPolicy.DESTROY, // Change to RETAIN for production
     });
 
-    // todo: ws
+    // WebSocket API (depends on database)
+    const websocket = new WebSocketConstruct(this, 'WebSocket', {
+      jobTable: database.jobTable, connectionTable: database.connectionTable, apiKeysTable: database.apiKeysTable,
+      queueCounterTable: database.queueCounterTable,
+      userPool: auth.userPool,
+      userPoolClient: auth.userPoolClient,
+    });
 
     // HTTP API (depends on all components)
     const api = new ApiConstruct(this, 'Api', {
@@ -43,7 +50,7 @@ export class ClipgenInfrastructureStack extends cdk.Stack {
     });
 
 
-    // Output the values you'll need
+    // Output the values that are needed
     new cdk.CfnOutput(this, 'UserPoolId', {
       value: auth.userPool.userPoolId, exportName: 'ClipgenUserPoolId',
     });
@@ -59,7 +66,11 @@ export class ClipgenInfrastructureStack extends cdk.Stack {
       description: 'HTTP API endpoint for job management',
     });
 
-    // todo: ws outputs
+    new cdk.CfnOutput(this, 'WebSocketApiEndpoint', {
+      value: websocket.webSocketEndpoint,
+      exportName: 'ClipgenWebSocketEndpoint',
+      description: 'WebSocket endpoint for real-time updates',
+    });
 
     new cdk.CfnOutput(this, 'JobTableName', {
       value: database.jobTable.tableName,
