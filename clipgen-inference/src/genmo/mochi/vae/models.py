@@ -1,5 +1,5 @@
 from functools import partial
-from typing import Any, Callable, Dict, List, Optional, Tuple, Union
+from typing import Callable, List, Optional, Tuple, Union
 
 import math
 import torch
@@ -7,11 +7,10 @@ import torch.nn as nn
 import torch.nn.functional as F
 from einops import rearrange
 
-import genmo.mochi_preview.dit.joint_model.context_parallel as cp
-from genmo.lib.progress import get_new_progress_bar
-from genmo.mochi_preview.vae.cp_conv import cp_pass_frames, gather_all_frames
-from genmo.mochi_preview.vae.latent_dist import LatentDistribution
-import genmo.mochi_preview.vae.cp_conv as cp_conv
+import genmo.mochi.dit.context_parallel as cp
+from genmo.mochi.lib.progress import get_new_progress_bar
+from genmo.mochi.vae.cp_conv import cp_pass_frames, gather_all_frames
+from genmo.mochi.vae.latent_dist import LatentDistribution
 
 
 def cast_tuple(t, length=1):

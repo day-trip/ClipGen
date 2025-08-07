@@ -28,17 +28,17 @@ from torch.distributed.fsdp.wrap import (
 from transformers import T5EncoderModel, T5Tokenizer
 from transformers.models.t5.modeling_t5 import T5Block
 
-import genmo.mochi_preview.dit.joint_model.context_parallel as cp
-from genmo.lib.progress import get_new_progress_bar, progress_bar
-from genmo.lib.utils import Timer
-from genmo.mochi_preview.vae.models import (
+import genmo.mochi.dit.context_parallel as cp
+from genmo.mochi.lib.progress import get_new_progress_bar, progress_bar
+from genmo.mochi.lib.utils import Timer
+from genmo.mochi.vae.models import (
     Decoder,
     Encoder,
     decode_latents,
     decode_latents_tiled_full,
     decode_latents_tiled_spatial,
 )
-from genmo.mochi_preview.vae.vae_stats import dit_latents_to_vae_latents
+from genmo.mochi.vae.vae_stats import dit_latents_to_vae_latents
 
 
 def load_to_cpu(p, weights_only=True):
@@ -137,7 +137,7 @@ class DitModelFactory(ModelFactory):
     ):
         # Infer attention mode if not specified
         if attention_mode is None:
-            from genmo.lib.attn_imports import flash_varlen_attn  # type: ignore
+            from genmo.mochi.lib.attn_imports import flash_varlen_attn  # type: ignore
             attention_mode = "sdpa" if flash_varlen_attn is None else "flash"
         print(f"Attention mode: {attention_mode}")
 
@@ -160,7 +160,7 @@ class DitModelFactory(ModelFactory):
         load_checkpoint=True,
         fast_init=True,
     ):
-        from genmo.mochi_preview.dit.joint_model.asymm_models_joint import AsymmDiTJoint
+        from genmo.mochi.dit.asymm_models_joint import AsymmDiTJoint
 
         if not model_kwargs:
             model_kwargs = {}

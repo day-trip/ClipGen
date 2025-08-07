@@ -8,25 +8,25 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch.nn.attention import sdpa_kernel
 
-import genmo.mochi_preview.dit.joint_model.context_parallel as cp
-from genmo.lib.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
-from genmo.mochi_preview.dit.joint_model.layers import (
+import genmo.mochi.dit.context_parallel as cp
+from genmo.mochi.lib.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
+from genmo.mochi.dit.layers import (
     FeedForward,
     PatchEmbed,
     RMSNorm,
     TimestepEmbedder,
 )
-from genmo.mochi_preview.dit.joint_model.lora import LoraLinear
-from genmo.mochi_preview.dit.joint_model.mod_rmsnorm import modulated_rmsnorm
-from genmo.mochi_preview.dit.joint_model.residual_tanh_gated_rmsnorm import (
+from genmo.mochi.dit.lora import LoraLinear
+from genmo.mochi.dit.mod_rmsnorm import modulated_rmsnorm
+from genmo.mochi.dit.residual_tanh_gated_rmsnorm import (
     residual_tanh_gated_rmsnorm,
 )
-from genmo.mochi_preview.dit.joint_model.rope_mixed import (
+from genmo.mochi.dit.rope_mixed import (
     compute_mixed_rotation,
     create_position_matrix,
 )
-from genmo.mochi_preview.dit.joint_model.temporal_rope import apply_rotary_emb_qk_real
-from genmo.mochi_preview.dit.joint_model.utils import (
+from genmo.mochi.dit.temporal_rope import apply_rotary_emb_qk_real
+from genmo.mochi.dit.utils import (
     AttentionPool,
     modulate,
     pad_and_split_xy,
