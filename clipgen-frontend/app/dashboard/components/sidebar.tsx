@@ -18,7 +18,7 @@ const navigation = [
         )
     },
     {
-        name: 'API Keys',
+        name: 'API Access',
         href: '/dashboard/api-keys',
         icon: <KeyIcon className="text-current w-5 h-5"/>
     },
@@ -49,7 +49,7 @@ export default function Sidebar() {
                         width={25}
                         height={25}
                     />
-                    <h1 className="ms-3 text-2xl font-semibold text-black">Mochi</h1>
+                    <h1 className="ms-3 text-2xl font-semibold text-black">Clipgen</h1>
                 </div>
             </div>
 

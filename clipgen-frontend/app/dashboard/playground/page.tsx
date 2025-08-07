@@ -260,11 +260,7 @@ function VideoResult({ videoUrl, jobId, onDownload }: { videoUrl: string, jobId:
 
 function EmptyState() {
     return <div className="h-full flex flex-col justify-center items-center text-center">
-        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Ready to create amazing videos</h3>
-        <p className="text-lg text-gray-500 max-w-md mx-auto">
-            Describe the video you want to generate and I&#39;ll create it for you. You can refine and iterate on
-            your ideas.
-        </p>
+        <h3 className="text-2xl font-semibold text-gray-900 mb-4">Ready to create amazing videos?</h3>
     </div>
 }
 
