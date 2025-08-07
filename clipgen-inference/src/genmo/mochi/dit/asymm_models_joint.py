@@ -16,7 +16,6 @@ from genmo.mochi.dit.layers import (
     RMSNorm,
     TimestepEmbedder,
 )
-from genmo.mochi.dit.lora import LoraLinear
 from genmo.mochi.dit.mod_rmsnorm import modulated_rmsnorm
 from genmo.mochi.dit.residual_tanh_gated_rmsnorm import (
     residual_tanh_gated_rmsnorm,
@@ -56,13 +55,6 @@ class AsymmetricAttention(nn.Module):
         attention_mode: str = "flash",
         softmax_scale: Optional[float] = None,
         device: Optional[torch.device] = None,
-        # Disable LoRA by default ...
-        qkv_proj_lora_rank: int = 0,
-        qkv_proj_lora_alpha: int = 0,
-        qkv_proj_lora_dropout: float = 0.0,
-        out_proj_lora_rank: int = 0,
-        out_proj_lora_alpha: int = 0,
-        out_proj_lora_dropout: float = 0.0,
     ):
         super().__init__()
         self.attention_mode = attention_mode
@@ -77,16 +69,10 @@ class AsymmetricAttention(nn.Module):
 
         # Input layers.
         self.qkv_bias = qkv_bias
-        qkv_lora_kwargs = dict(
-            bias=qkv_bias,
-            device=device,
-            r=qkv_proj_lora_rank,
-            lora_alpha=qkv_proj_lora_alpha,
-            lora_dropout=qkv_proj_lora_dropout,
-        )
-        self.qkv_x = LoraLinear(dim_x, 3 * dim_x, **qkv_lora_kwargs)
+        # CHANGE: Replace LoraLinear with nn.Linear
+        self.qkv_x = nn.Linear(dim_x, 3 * dim_x, bias=qkv_bias, device=device)
         # Project text features to match visual features (dim_y -> dim_x)
-        self.qkv_y = LoraLinear(dim_y, 3 * dim_x, **qkv_lora_kwargs)
+        self.qkv_y = nn.Linear(dim_y, 3 * dim_x, bias=qkv_bias, device=device)
 
         # Query and key normalization for stability.
         assert qk_norm
@@ -96,15 +82,9 @@ class AsymmetricAttention(nn.Module):
         self.k_norm_y = RMSNorm(self.head_dim, device=device)
 
         # Output layers. y features go back down from dim_x -> dim_y.
-        proj_lora_kwargs = dict(
-            bias=out_bias,
-            device=device,
-            r=out_proj_lora_rank,
-            lora_alpha=out_proj_lora_alpha,
-            lora_dropout=out_proj_lora_dropout,
-        )
-        self.proj_x = LoraLinear(dim_x, dim_x, **proj_lora_kwargs)
-        self.proj_y = LoraLinear(dim_x, dim_y, **proj_lora_kwargs) if update_y else nn.Identity()
+        # CHANGE: Replace LoraLinear with nn.Linear
+        self.proj_x = nn.Linear(dim_x, dim_x, bias=out_bias, device=device)
+        self.proj_y = nn.Linear(dim_x, dim_y, bias=out_bias, device=device) if update_y else nn.Identity()
 
     def run_qkv_y(self, y):
         cp_rank, cp_size = cp.get_cp_rank_size()

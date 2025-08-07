@@ -31,21 +31,3 @@ class Timer:
             end_time = time.perf_counter()
             elapsed = end_time - self.start_time
             self.outer.times[self.name] = self.outer.times.get(self.name, 0) + elapsed
-
-
-def create_memory_tracker():
-    import torch
-
-    previous = [None]  # Use list for mutable closure state
-
-    def track(label="all2all"):
-        current = torch.cuda.memory_allocated() / 1e9
-        if previous[0] is not None:
-            diff = current - previous[0]
-            sign = "+" if diff >= 0 else ""
-            print(f"GPU memory ({label}): {current:.2f} GB ({sign}{diff:.2f} GB)")
-        else:
-            print(f"GPU memory ({label}): {current:.2f} GB")
-        previous[0] = current  # type: ignore
-
-    return track

@@ -1,4 +1,3 @@
-import json
 import os
 import random
 from abc import ABC, abstractmethod
@@ -12,7 +11,6 @@ import torch
 import torch.distributed as dist
 import torch.nn.functional as F
 from einops import repeat
-from safetensors import safe_open
 from safetensors.torch import load_file
 from torch import nn
 from torch.distributed.fsdp import (
@@ -33,7 +31,6 @@ from genmo.mochi.lib.progress import get_new_progress_bar, progress_bar
 from genmo.mochi.lib.utils import Timer
 from genmo.mochi.vae.models import (
     Decoder,
-    Encoder,
     decode_latents,
     decode_latents_tiled_full,
     decode_latents_tiled_spatial,
@@ -47,23 +44,6 @@ def load_to_cpu(p, weights_only=True):
     else:
         assert p.endswith(".pt")
         return torch.load(p, map_location="cpu", weights_only=weights_only)
-
-
-def linear_quadratic_schedule(num_steps, threshold_noise, linear_steps=None):
-    if linear_steps is None:
-        linear_steps = num_steps // 2
-    linear_sigma_schedule = [i * threshold_noise / linear_steps for i in range(linear_steps)]
-    threshold_noise_step_diff = linear_steps - threshold_noise * num_steps
-    quadratic_steps = num_steps - linear_steps
-    quadratic_coef = threshold_noise_step_diff / (linear_steps * quadratic_steps**2)
-    linear_coef = threshold_noise / linear_steps - 2 * threshold_noise_step_diff / (quadratic_steps**2)
-    const = quadratic_coef * (linear_steps**2)
-    quadratic_sigma_schedule = [
-        quadratic_coef * (i**2) + linear_coef * i + const for i in range(linear_steps, num_steps)
-    ]
-    sigma_schedule = linear_sigma_schedule + quadratic_sigma_schedule + [1.0]
-    sigma_schedule = [1.0 - x for x in sigma_schedule]
-    return sigma_schedule
 
 
 T5_MODEL = "google/t5-v1_1-xxl"
@@ -132,7 +112,6 @@ class DitModelFactory(ModelFactory):
         self, *,
         model_path: str,
         model_dtype: str,
-        lora_path: Optional[str] = None,
         attention_mode: Optional[str] = None
     ):
         # Infer attention mode if not specified
@@ -143,7 +122,6 @@ class DitModelFactory(ModelFactory):
 
         super().__init__(
             model_path=model_path,
-            lora_path=lora_path,
             model_dtype=model_dtype,
             attention_mode=attention_mode
         )
@@ -164,22 +142,6 @@ class DitModelFactory(ModelFactory):
 
         if not model_kwargs:
             model_kwargs = {}
-
-        lora_sd = None
-        lora_path = self.kwargs["lora_path"]
-        if lora_path is not None:
-            if lora_path.endswith(".safetensors"):
-                lora_sd = {}
-                with safe_open(lora_path, framework="pt") as f:
-                    for k in f.keys():
-                        lora_sd[k] = f.get_tensor(k)
-                    lora_kwargs = json.loads(f.metadata()["kwargs"])
-                    print(f"Loaded LoRA kwargs: {lora_kwargs}")
-            else:
-                lora = load_to_cpu(lora_path, weights_only=False)
-                lora_sd, lora_kwargs = lora["state_dict"], lora["kwargs"]
-
-            model_kwargs.update(cast(dict, lora_kwargs))
 
         model_args = dict(
             depth=48,
@@ -220,14 +182,10 @@ class DitModelFactory(ModelFactory):
             load_result = model.load_state_dict(sd, strict=strict_load)
             if not strict_load:
                 # Print mismatched keys
-                missing_keys = [k for k in load_result.missing_keys if ".lora_" not in k]
-                if missing_keys:
-                    print(f"Missing keys from {model_path}: {missing_keys}")
+                if load_result.missing_keys:
+                    print(f"Missing keys from {model_path}: {load_result.missing_keys}")
                 if load_result.unexpected_keys:
                     print(f"Unexpected keys from {model_path}: {load_result.unexpected_keys}")
-
-            if lora_sd:
-                model.load_state_dict(lora_sd, strict=strict_load) # type: ignore
 
         if world_size > 1:
             assert self.kwargs["model_dtype"] == "bf16", "FP8 is not supported for multi-GPU inference"
@@ -276,40 +234,9 @@ class DecoderModelFactory(ModelFactory):
         return decoder
 
 
-class EncoderModelFactory(ModelFactory):
-    def __init__(self, *, model_path: str):
-        super().__init__(model_path=model_path)
-
-    def get_model(self, *, local_rank=0, device_id=0, world_size=1):
-        # TODO(ved): Set flag for torch.compile
-        # TODO(ved): Use skip_init
-
-        # We don't FSDP the encoder b/c it is small
-        encoder = Encoder(
-            in_channels=15,
-            base_channels=64,
-            channel_multipliers=[1, 2, 4, 6],
-            num_res_blocks=[3, 3, 4, 6, 3],
-            latent_dim=12,
-            temporal_reductions=[1, 2, 3],
-            spatial_reductions=[2, 2, 2],
-            prune_bottlenecks=[False, False, False, False, False],
-            has_attentions=[False, True, True, True, True],
-            affine=True,
-            bias=True,
-            input_is_conv_1x1=True,
-            padding_mode="replicate",
-        )
-        state_dict = load_file(self.kwargs["model_path"])
-        encoder.load_state_dict(state_dict, strict=True)
-        device = torch.device(f"cuda:{device_id}") if isinstance(device_id, int) else "cpu"
-        encoder.eval().to(device)
-        return encoder
-
-
 def get_conditioning(
     tokenizer: T5Tokenizer,
-    encoder: Encoder,
+    encoder,
     device: torch.device,
     batch_inputs: bool,
     *,
@@ -574,21 +501,7 @@ class MochiSingleGPUPipeline:
             return frames.cpu().numpy()
 
 
-def cast_dit(model, dtype):
-    for name, module in model.named_modules():
-        if isinstance(module, nn.Linear):
-            assert any(
-                n in name for n in ["mlp", "t5", "mod_", "attn.qkv_", "attn.proj_", "final_layer"]
-            ), f"Unexpected linear layer: {name}"
-            module.to(dtype=dtype)
-        elif isinstance(module, nn.Conv2d):
-            assert "x_embedder.proj" in name, f"Unexpected conv2d layer: {name}"
-            module.to(dtype=dtype)
-    return model
-
-
 ### ALL CODE BELOW HERE IS FOR MULTI-GPU MODE ###
-
 
 # In multi-gpu mode, all models must belong to a device which has a predefined context parallel group
 # So it doesn't make sense to work with models individually
