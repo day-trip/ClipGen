@@ -24,6 +24,13 @@ export class ApiConstruct extends Construct {
     public readonly createJobFunction: lambda.Function;
     public readonly getJobFunction: lambda.Function;
     public readonly listJobsFunction: lambda.Function;
+    public readonly createApiKeyFunction: lambda.Function;
+    public readonly listApiKeysFunction: lambda.Function;
+    public readonly deleteApiKeyFunction: lambda.Function;
+    public readonly listLogsFunction: lambda.Function;
+    public readonly downloadVideoFunction: lambda.Function;
+    public readonly internalCreateJobFunction: lambda.Function;
+    public readonly internalGetJobFunction: lambda.Function;
 
     constructor(scope: Construct, id: string, props: ApiProps) {
         super(scope, id);
@@ -51,6 +58,13 @@ export class ApiConstruct extends Construct {
         this.createJobFunction = this.createLambdaFunction('CreateJob', 'createJob.handler', commonEnv);
         this.getJobFunction = this.createLambdaFunction('GetJob', 'getJob.handler', commonEnv);
         this.listJobsFunction = this.createLambdaFunction('ListJobs', 'listJobs.handler', commonEnv);
+        this.createApiKeyFunction = this.createLambdaFunction('CreateApiKey', 'internal/createApiKey.handler', commonEnv);
+        this.listApiKeysFunction = this.createLambdaFunction('ListApiKeys', 'internal/listApiKeys.handler', commonEnv);
+        this.deleteApiKeyFunction = this.createLambdaFunction('DeleteApiKey', 'internal/deleteApiKey.handler', commonEnv);
+        this.listLogsFunction = this.createLambdaFunction('ListLogs', 'internal/listLogs.handler', commonEnv);
+        this.downloadVideoFunction = this.createLambdaFunction('DownloadVideo', 'internal/downloadVideo.handler', commonEnv);
+        this.internalCreateJobFunction = this.createLambdaFunction('InternalCreateJob', 'internal/createJob.handler', commonEnv);
+        this.internalGetJobFunction = this.createLambdaFunction('InternalGetJob', 'internal/getJob.handler', commonEnv);
 
         // Grant permissions
         props.jobTable.grantReadWriteData(this.createJobFunction);
@@ -59,10 +73,21 @@ export class ApiConstruct extends Construct {
         props.apiKeysTable.grantReadData(this.createJobFunction);
         props.apiKeysTable.grantReadData(this.getJobFunction);
         props.apiKeysTable.grantReadData(this.listJobsFunction);
+        props.apiKeysTable.grantReadWriteData(this.createApiKeyFunction);
+        props.apiKeysTable.grantReadData(this.listApiKeysFunction);
+        props.apiKeysTable.grantReadWriteData(this.deleteApiKeyFunction);
+        props.jobTable.grantReadData(this.listLogsFunction);
+        props.jobTable.grantReadData(this.downloadVideoFunction);
+        props.jobTable.grantReadWriteData(this.internalCreateJobFunction);
+        props.jobTable.grantReadData(this.internalGetJobFunction);
         props.mediaBucket.grantReadWrite(this.createJobFunction);
         props.mediaBucket.grantRead(this.getJobFunction);
+        props.mediaBucket.grantRead(this.downloadVideoFunction);
+        props.mediaBucket.grantRead(this.internalGetJobFunction);
         props.processingQueue.grantSendMessages(this.createJobFunction);
+        props.processingQueue.grantSendMessages(this.internalCreateJobFunction);
         props.queueCounterTable.grantReadWriteData(this.createJobFunction);
+        props.queueCounterTable.grantReadWriteData(this.internalCreateJobFunction);
 
         // Routes
         this.httpApi.addRoutes({
@@ -81,6 +106,49 @@ export class ApiConstruct extends Construct {
             path: '/jobs/{jobId}',
             methods: [apigatewayv2.HttpMethod.GET],
             integration: new apigatewayv2_integrations.HttpLambdaIntegration('GetJobIntegration', this.getJobFunction),
+        });
+
+        // Internal API routes (protected by Cognito)
+        this.httpApi.addRoutes({
+            path: '/internal/api-keys',
+            methods: [apigatewayv2.HttpMethod.POST],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('CreateApiKeyIntegration', this.createApiKeyFunction),
+        });
+
+        this.httpApi.addRoutes({
+            path: '/internal/api-keys',
+            methods: [apigatewayv2.HttpMethod.GET],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('ListApiKeysIntegration', this.listApiKeysFunction),
+        });
+
+        this.httpApi.addRoutes({
+            path: '/internal/api-keys/{apiKey}',
+            methods: [apigatewayv2.HttpMethod.DELETE],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('DeleteApiKeyIntegration', this.deleteApiKeyFunction),
+        });
+
+        this.httpApi.addRoutes({
+            path: '/internal/logs',
+            methods: [apigatewayv2.HttpMethod.GET],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('ListLogsIntegration', this.listLogsFunction),
+        });
+
+        this.httpApi.addRoutes({
+            path: '/internal/download/{jobId}',
+            methods: [apigatewayv2.HttpMethod.POST],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('DownloadVideoIntegration', this.downloadVideoFunction),
+        });
+
+        this.httpApi.addRoutes({
+            path: '/internal/jobs',
+            methods: [apigatewayv2.HttpMethod.POST],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('InternalCreateJobIntegration', this.internalCreateJobFunction),
+        });
+
+        this.httpApi.addRoutes({
+            path: '/internal/jobs/{jobId}',
+            methods: [apigatewayv2.HttpMethod.GET],
+            integration: new apigatewayv2_integrations.HttpLambdaIntegration('InternalGetJobIntegration', this.internalGetJobFunction),
         });
     }
 
