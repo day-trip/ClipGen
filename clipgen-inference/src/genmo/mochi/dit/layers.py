@@ -60,6 +60,28 @@ class TimestepEmbedder(nn.Module):
         return t_emb
 
 
+class PooledCaptionEmbedder(nn.Module):
+    def __init__(
+        self,
+        caption_feature_dim: int,
+        hidden_size: int,
+        *,
+        bias: bool = True,
+        device: Optional[torch.device] = None,
+    ):
+        super().__init__()
+        self.caption_feature_dim = caption_feature_dim
+        self.hidden_size = hidden_size
+        self.mlp = nn.Sequential(
+            nn.Linear(caption_feature_dim, hidden_size, bias=bias, device=device),
+            nn.SiLU(),
+            nn.Linear(hidden_size, hidden_size, bias=bias, device=device),
+        )
+
+    def forward(self, x):
+        return self.mlp(x)
+
+
 class FeedForward(nn.Module):
     def __init__(
         self,
@@ -77,6 +99,7 @@ class FeedForward(nn.Module):
             hidden_size = int(ffn_dim_multiplier * hidden_size)
         hidden_size = multiple_of * ((hidden_size + multiple_of - 1) // multiple_of)
 
+        self.hidden_dim = hidden_size
         self.w1 = nn.Linear(in_features, 2 * hidden_size, bias=False, device=device)
         self.w2 = nn.Linear(hidden_size, in_features, bias=False, device=device)
 

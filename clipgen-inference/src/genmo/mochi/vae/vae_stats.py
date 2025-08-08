@@ -53,3 +53,15 @@ def dit_latents_to_vae_latents(dit_outputs: torch.Tensor) -> torch.Tensor:
     assert dit_outputs.ndim == 5
     assert dit_outputs.size(1) == mean.size(0) == std.size(0)
     return dit_outputs * std.to(dit_outputs) + mean.to(dit_outputs)
+
+
+def vae_latents_to_dit_latents(vae_latents: torch.Tensor):
+    """Normalize latents output by the VAE encoder to be compatible with Mochi's DiT.
+    E.g, for fine-tuning or video-to-video.
+    """
+    mean = STATS["mean"][:, None, None, None]
+    std = STATS["std"][:, None, None, None]
+
+    assert vae_latents.ndim == 5
+    assert vae_latents.size(1) == mean.size(0) == std.size(0)
+    return (vae_latents - mean.to(vae_latents)) / std.to(vae_latents)

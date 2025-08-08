@@ -1,5 +1,6 @@
 import os
 import random
+import time
 from abc import ABC, abstractmethod
 from contextlib import contextmanager
 from functools import partial
@@ -26,14 +27,17 @@ from torch.distributed.fsdp.wrap import (
 from transformers import T5EncoderModel, T5Tokenizer
 from transformers.models.t5.modeling_t5 import T5Block
 
-import mochi.dit.context_parallel as cp
-from mochi.lib.progress import get_new_progress_bar, progress_bar
-from mochi.lib.utils import Timer
-from mochi.vae.models import (
+import genmo.mochi.dit.context_parallel as cp
+from genmo.mochi.util.progress import get_new_progress_bar, progress_bar
+from genmo.mochi.util.utils import Timer
+from genmo.mochi.vae.models import (
     Decoder,
-    decode_latents, decode_latents_tiled_full, decode_latents_tiled_spatial,
+    Encoder,
+    decode_latents,
+    decode_latents_tiled_full,
+    decode_latents_tiled_spatial,
 )
-from mochi.vae.vae_stats import dit_latents_to_vae_latents
+from genmo.mochi.vae.vae_stats import dit_latents_to_vae_latents
 
 
 def load_to_cpu(p, weights_only=True):
@@ -65,7 +69,7 @@ T5_MODEL = "google/t5-v1_1-xxl"
 MAX_T5_TOKEN_LENGTH = 256
 
 
-def setup_fsdp_sync(model, device_id, *, param_dtype, auto_wrap_policy) -> FSDP:
+def setup_fsdp_sync(model, device_id, *, param_dtype, auto_wrap_policy, sync_module_states=True) -> FSDP:
     model = FSDP(
         model,
         sharding_strategy=ShardingStrategy.FULL_SHARD,
@@ -78,10 +82,10 @@ def setup_fsdp_sync(model, device_id, *, param_dtype, auto_wrap_policy) -> FSDP:
         backward_prefetch=BackwardPrefetch.BACKWARD_PRE,
         limit_all_gathers=True,
         device_id=device_id,
-        sync_module_states=True,
+        sync_module_states=sync_module_states,
         use_orig_params=True,
     )
-    torch.cuda.synchronize()
+
     return model
 
 
@@ -131,7 +135,7 @@ class DitModelFactory(ModelFactory):
     ):
         # Infer attention mode if not specified
         if attention_mode is None:
-            from mochi.lib.attn_imports import flash_varlen_attn  # type: ignore
+            from genmo.mochi.util.attn_imports import flash_varlen_attn  # type: ignore
             attention_mode = "sdpa" if flash_varlen_attn is None else "flash"
         print(f"Attention mode: {attention_mode}")
 
@@ -148,12 +152,11 @@ class DitModelFactory(ModelFactory):
         device_id,
         world_size,
         model_kwargs=None,
-        patch_model_fns=None,
         strict_load=True,
         load_checkpoint=True,
         fast_init=True,
     ):
-        from mochi.dit.asymm_models_joint import AsymmDiTJoint
+        from genmo.mochi.dit.asymm_models_joint import AsymmDiTJoint
 
         if not model_kwargs:
             model_kwargs = {}
@@ -180,21 +183,32 @@ class DitModelFactory(ModelFactory):
             **model_kwargs,
         )
 
+        print("Creating model structure...")
+        start = time.time()
+
         if fast_init:
             model: nn.Module = torch.nn.utils.skip_init(AsymmDiTJoint, **model_args)
         else:
             model: nn.Module = AsymmDiTJoint(**model_args)
 
-        for fn in patch_model_fns or []:
-            model = fn(model)
+        print(f"Model structure creation: {time.time() - start:.2f}s")
 
         # FSDP syncs weights from rank 0 to all other ranks
         if local_rank == 0 and load_checkpoint:
+            print("Loading checkpoint to CPU...")
+            start = time.time()
+
             model_path = self.kwargs["model_path"]
             sd = load_to_cpu(model_path)
 
+            print(f"load_to_cpu: {time.time() - start:.2f}s")
+
             # Load the state dictionary and capture the return value
+            print("Loading state dict...")
+            start = time.time()
             load_result = model.load_state_dict(sd, strict=strict_load)
+            print(f"load_state_dict: {time.time() - start:.2f}s")
+
             if not strict_load:
                 # Print mismatched keys
                 if load_result.missing_keys:
@@ -205,6 +219,9 @@ class DitModelFactory(ModelFactory):
         if world_size > 1:
             assert self.kwargs["model_dtype"] == "bf16", "FP8 is not supported for multi-GPU inference"
 
+            print("Applying FSDP...")
+            start = time.time()
+
             model = setup_fsdp_sync(
                 model,
                 device_id=device_id,
@@ -214,6 +231,8 @@ class DitModelFactory(ModelFactory):
                     lambda_fn=lambda m: m in model.blocks,
                 ),
             )
+
+            print(f"FSDP setup: {time.time() - start:.2f}s")
         elif isinstance(device_id, int):
             model = model.to(torch.device(f"cuda:{device_id}"))
         return model.eval()
@@ -251,7 +270,7 @@ class DecoderModelFactory(ModelFactory):
 
 def get_conditioning(
     tokenizer: T5Tokenizer,
-    encoder,
+    encoder: Encoder,
     device: torch.device,
     batch_inputs: bool,
     *,
@@ -301,7 +320,7 @@ def get_conditioning_for_prompts(tokenizer, encoder, device, prompts: List[str])
     # Sometimes returns a tensor, othertimes a tuple, not sure why
     # See: https://huggingface.co/genmo/mochi-1-preview/discussions/3
     assert tuple(y_feat[-1].shape) == (B, MAX_T5_TOKEN_LENGTH, 4096)
-    y_feat[-1] = y_feat[-1].float()  # Ensure float32
+    assert y_feat[-1].dtype == torch.float32
 
     return dict(y_mask=y_mask, y_feat=y_feat)
 
@@ -409,7 +428,11 @@ def sample_model(device, dit, conditioning, **args):
 
     # Euler sampler w/ customizable sigma schedule & cfg scale
     for i in get_new_progress_bar(range(0, sample_steps), desc="Sampling"):
-        print("SAMPLING")
+        # Log progress every 10 steps for kubectl logs visibility
+        if i % 10 == 0 or i == sample_steps - 1:
+            progress = (i + 1) / sample_steps * 100
+            print(f"⚡ Inference progress: {i+1}/{sample_steps} steps ({progress:.1f}%)")
+        
         sigma = sigma_schedule[i]
         dsigma = sigma - sigma_schedule[i + 1]
 
@@ -449,7 +472,6 @@ def t5_tokenizer(model_dir=None):
     return T5Tokenizer.from_pretrained(model_dir or T5_MODEL, legacy=False)
 
 
-# WE DO NOT CARE ABOUT OPTIMIZING THE SINGLE-GPU PIPELINE!
 class MochiSingleGPUPipeline:
     def __init__(
         self,
@@ -519,6 +541,7 @@ class MochiSingleGPUPipeline:
 
 
 ### ALL CODE BELOW HERE IS FOR MULTI-GPU MODE ###
+
 
 # In multi-gpu mode, all models must belong to a device which has a predefined context parallel group
 # So it doesn't make sense to work with models individually
