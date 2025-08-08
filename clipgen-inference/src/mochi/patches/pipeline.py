@@ -106,17 +106,22 @@ class MochiDualGPUPipeline:
         def sample(ctx, *, batch_cfg, prompt, negative_prompt, **kwargs):
             # CHANGE: removed progress bar - our K8 won't render these anyway
             with torch.inference_mode():
-                conditioning = get_conditioning(
-                    ctx.tokenizer,
-                    ctx.text_encoder,
-                    ctx.device,
-                    batch_cfg,
-                    prompt=prompt,
-                    negative_prompt=negative_prompt,
-                )
-                latents = sample_model(ctx.device, ctx.dit, conditioning=conditioning, **kwargs)
-                # CHANGE: no longer saving intermediate state to 'latents.pt'
-                frames = decode_latents_tiled_distributed(ctx.decoder, latents)
+                try:
+                    print("RUNNING INFERENCE")
+                    conditioning = get_conditioning(
+                        ctx.tokenizer,
+                        ctx.text_encoder,
+                        ctx.device,
+                        batch_cfg,
+                        prompt=prompt,
+                        negative_prompt=negative_prompt,
+                    )
+                    latents = sample_model(ctx.device, ctx.dit, conditioning=conditioning, **kwargs)
+                    # CHANGE: no longer saving intermediate state to 'latents.pt'
+                    frames = decode_latents_tiled_distributed(ctx.decoder, latents)
+                except Exception as e:
+                    print("NOOOO GOT ERROR")
+                    print(e)
             return frames.cpu().numpy()
 
         return ray.get(
