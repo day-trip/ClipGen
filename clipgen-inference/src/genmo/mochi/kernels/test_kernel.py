@@ -5,7 +5,7 @@ Run with: python -m pytest test_kernel.py -v
 """
 import torch
 import pytest
-from .ops import fused_residual_tanh_gated_rmsnorm, _residual_tanh_gated_rmsnorm_pytorch
+from .ops import fused_residual_tanh_gated_rmsnorm, _residual_tanh_gated_rmsnorm
 
 
 @pytest.mark.skipif(not torch.cuda.is_available(), reason="CUDA not available")
@@ -29,7 +29,7 @@ def test_kernel_correctness():
         gate = torch.randn(B, D, dtype=torch.bfloat16, device='cuda')
         
         # PyTorch reference
-        ref_out = _residual_tanh_gated_rmsnorm_pytorch(
+        ref_out = _residual_tanh_gated_rmsnorm(
             x.float(), x_res.float(), gate.float()
         ).to(torch.bfloat16)
         

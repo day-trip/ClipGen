@@ -29,7 +29,7 @@ from genmo.mochi.dit.utils import (
     modulate,
     pad_and_split_xy,
 )
-from genmo.mochi.kernels.ops import fused_residual_tanh_gated_rmsnorm
+from genmo.mochi.kernels.ops import fused_residual_tanh_gated_rmsnorm, fused_conditioning_block
 from genmo.mochi.util.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
 
 COMPILE_FINAL_LAYER = os.environ.get("COMPILE_DIT") == "1"
@@ -489,17 +489,18 @@ class AsymmetricJointBlock(nn.Module):
 
         return x, y
 
-    def ff_block_x(self, x, scale_x, gate_x):
-        x_mod = modulated_rmsnorm(x, scale_x)
-        x_res = self.mlp_x(x_mod)
-        x = residual_tanh_gated_rmsnorm(x, x_res, gate_x)  # Sandwich norm
-        return x
-
-    def ff_block_y(self, y, scale_y, gate_y):
-        y_mod = modulated_rmsnorm(y, scale_y)
-        y_res = self.mlp_y(y_mod)
-        y = residual_tanh_gated_rmsnorm(y, y_res, gate_y)  # Sandwich norm
-        return y
+    # Replaced by my `fused_residual_tanh_gated_rmsnorm` for now (testing)
+    # def ff_block_x(self, x, scale_x, gate_x):
+    #     x_mod = modulated_rmsnorm(x, scale_x)
+    #     x_res = self.mlp_x(x_mod)
+    #     x = residual_tanh_gated_rmsnorm(x, x_res, gate_x)  # Sandwich norm
+    #     return x
+    #
+    # def ff_block_y(self, y, scale_y, gate_y):
+    #     y_mod = modulated_rmsnorm(y, scale_y)
+    #     y_res = self.mlp_y(y_mod)
+    #     y = residual_tanh_gated_rmsnorm(y, y_res, gate_y)  # Sandwich norm
+    #     return y
 
 
 @torch.compile(disable=not COMPILE_FINAL_LAYER)

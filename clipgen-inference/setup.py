@@ -7,15 +7,11 @@ import os
 os.environ['CUDA_HOME'] = '/usr/local/cuda'
 os.environ['TORCH_CUDA_ARCH_LIST'] = '9.0'
 
-# Only build CUDA extensions if CUDA is available OR if forced
-ext_modules = []
-if torch.cuda.is_available() or os.environ.get('FORCE_CUDA', '').lower() in ('1', 'true'):
-    # Fused RMSNorm kernel
-    fused_rmsnorm_ext = cpp_extension.CUDAExtension(
-        name='genmo.mochi.kernels._C.fused_rmsnorm',  # Note: updated name to match your structure
-        sources=[
-            os.path.join('src', 'genmo', 'mochi', 'kernels', 'cuda', 'fused_rmsnorm.cu'),
-        ],
+
+def create_cuda_extension(name: str, path: str):
+    return cpp_extension.CUDAExtension(
+        name=name,
+        sources=[path],
         extra_compile_args={
             'cxx': ['-O3'],
             'nvcc': [
@@ -30,7 +26,14 @@ if torch.cuda.is_available() or os.environ.get('FORCE_CUDA', '').lower() in ('1'
         },
         include_dirs=cpp_extension.include_paths(),
     )
-    ext_modules.append(fused_rmsnorm_ext)
+
+# Only build CUDA extensions if CUDA is available OR if forced
+ext_modules = []
+if torch.cuda.is_available() or os.environ.get('FORCE_CUDA', '').lower() in ('1', 'true'):
+    # Fused RMSNorm kernel
+    ext_modules.append(create_cuda_extension('genmo.mochi.kernels._C.fused_rmsnorm', os.path.join('src', 'genmo', 'mochi', 'kernels', 'cuda', 'fused_rmsnorm.cu')))
+    # Fused conditioning
+    ext_modules.append(create_cuda_extension('genmo.mochi.kernels._C.fused_conditioning', os.path.join('src', 'genmo', 'mochi', 'kernels', 'cuda', 'fused_conditioning.cu')))
 
 setup(
     name='clipgen-inference',
