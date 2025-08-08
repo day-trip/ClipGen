@@ -1,6 +1,6 @@
 import os
-from typing import Dict, List, Optional, Tuple
 import warnings
+from typing import Dict, List, Optional, Tuple
 
 import torch
 import torch.nn as nn
@@ -8,28 +8,28 @@ import torch.nn.functional as F
 from einops import rearrange
 from torch.nn.attention import sdpa_kernel
 
-import mochi.dit.context_parallel as cp
-from mochi.lib.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
-from mochi.dit.layers import (
+import genmo.mochi.dit.context_parallel as cp
+from genmo.mochi.dit.layers import (
     FeedForward,
     PatchEmbed,
     RMSNorm,
     TimestepEmbedder,
 )
-from mochi.dit.mod_rmsnorm import modulated_rmsnorm
-from mochi.dit.residual_tanh_gated_rmsnorm import (
+from genmo.mochi.dit.mod_rmsnorm import modulated_rmsnorm
+from genmo.mochi.dit.residual_tanh_gated_rmsnorm import (
     residual_tanh_gated_rmsnorm,
 )
-from mochi.dit.rope_mixed import (
+from genmo.mochi.dit.rope_mixed import (
     compute_mixed_rotation,
     create_position_matrix,
 )
-from mochi.dit.temporal_rope import apply_rotary_emb_qk_real
-from mochi.dit.utils import (
+from genmo.mochi.dit.temporal_rope import apply_rotary_emb_qk_real
+from genmo.mochi.dit.utils import (
     AttentionPool,
     modulate,
     pad_and_split_xy,
 )
+from genmo.mochi.util.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
 
 COMPILE_FINAL_LAYER = os.environ.get("COMPILE_DIT") == "1"
 COMPILE_MMDIT_BLOCK = os.environ.get("COMPILE_DIT") == "1"
@@ -54,7 +54,7 @@ class AsymmetricAttention(nn.Module):
         out_bias: bool = True,
         attention_mode: str = "flash",
         softmax_scale: Optional[float] = None,
-        device: Optional[torch.device] = None,
+        device: Optional[torch.device] = None
     ):
         super().__init__()
         self.attention_mode = attention_mode

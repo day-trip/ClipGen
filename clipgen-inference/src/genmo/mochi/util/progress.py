@@ -1,5 +1,5 @@
 import contextlib
-from typing import Any, Iterable, Optional
+from typing import Any, Iterable, Iterator, Optional
 
 try:
     from tqdm import tqdm
@@ -31,7 +31,7 @@ class DummyProgressBar:
     def close(self):
         pass
 
-    def set_description(self, _desc):
+    def set_description(self, desc):
         pass
 
 
