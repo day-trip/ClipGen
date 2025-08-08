@@ -144,7 +144,7 @@ class TestFusedRMSNorm:
         
         assert output.shape == (N, D)
         assert output.dtype == torch.bfloat16
-        assert output.device == cuda_device
+        assert output.device.type == cuda_device.type
 
     def test_cpu_fallback(self):
         """Test CPU fallback behavior."""
