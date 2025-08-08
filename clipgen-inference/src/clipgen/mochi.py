@@ -109,6 +109,7 @@ class MochiModel(ModelInterface):
         if USE_MULTI_GPU:
             from mochi.pipelines import DecoderModelFactory, DitModelFactory
             from mochi.patches.encoder import BetterT5ModelFactory
+            from mochi.patches.pipeline import MochiDualGPUPipeline
 
             print("Loading Multi-GPU Mochi pipeline...")
 
