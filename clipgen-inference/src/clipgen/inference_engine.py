@@ -3,8 +3,7 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import Dict, Any, Optional
 
-from model_interface import ModelInterface
-from mochi import MochiModel
+from clipgen.model_interface import ModelInterface
 
 
 @dataclass
