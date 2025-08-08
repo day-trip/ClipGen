@@ -3,7 +3,7 @@ kind: PersistentVolume
 metadata:
   name: mochi-models-pv
   labels:
-    app: inference-worker
+    app: sqs-worker
 spec:
   capacity:
     storage: 200Gi  # Generous space
@@ -17,18 +17,18 @@ spec:
   nodeAffinity:
     required:
       nodeSelectorTerms:
-        - matchExpressions:
-            - key: kubernetes.io/hostname
-              operator: In
-              values:
-                - g094  # Only available on your GPU node
+      - matchExpressions:
+        - key: kubernetes.io/hostname
+          operator: In
+          values:
+          - g094  # Only available on your GPU node
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim
 metadata:
   name: mochi-models-pvc
   labels:
-    app: inference-worker
+    app: sqs-worker
 spec:
   accessModes:
     - ReadWriteMany

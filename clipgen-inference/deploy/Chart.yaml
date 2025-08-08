@@ -1,5 +1,5 @@
 apiVersion: v2
-name: clipgen-deploy
+name: clipgen-inference
 description: A Helm chart for deploying Mochi to Kubernetes with horizontal scaling support
 
 # A chart can be either an 'application' or a 'library' chart.

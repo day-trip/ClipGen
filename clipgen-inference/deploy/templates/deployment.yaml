@@ -1,18 +1,18 @@
 apiVersion: apps/v1
 kind: Deployment
 metadata:
-  name: inference-worker
+  name: sqs-worker
   labels:
-    app: inference-worker
+    app: sqs-worker
 spec:
   replicas: {{ .Values.scaling.minReplicas }}
   selector:
     matchLabels:
-      app: inference-worker
+      app: sqs-worker
   template:
     metadata:
       labels:
-        app: inference-worker
+        app: sqs-worker
     spec:
       {{- with .Values.image.pullSecrets }}
       imagePullSecrets:

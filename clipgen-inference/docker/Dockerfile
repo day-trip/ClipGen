@@ -58,4 +58,4 @@ ENV PYTHONPATH="/app/src" \
 EXPOSE 8000
 
 # Run the main application using the python from our venv
-CMD ["./.venv/bin/python", "-u", "src/clipgen/main.py"]
+CMD ["./.venv/bin/python", "-u", "src/speechface/main.py"]

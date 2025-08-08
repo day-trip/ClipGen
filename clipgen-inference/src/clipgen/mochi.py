@@ -83,6 +83,11 @@ class MochiModel(ModelInterface):
             max_wait_seconds=1800
         )
 
+    async def _create_shards(self) -> None:
+        """Create pre-sharded checkpoints if needed."""
+        from sharding import create_shards
+        await create_shards(self.weights_dir, self.shards_dir)
+
     async def initialize(self, gpu_devices: list[int]) -> None:
         """Initialize the Mochi model pipeline."""
         print(f"Initializing Mochi model on GPUs: {gpu_devices}")
@@ -103,6 +108,9 @@ class MochiModel(ModelInterface):
         
         # Download models if needed
         await self._download_models()
+        # Create sharded checkpoints if needed (only for multi-GPU)
+        if USE_MULTI_GPU:
+            await self._create_shards()
 
         dump_mochi_weights_info(Path("/tmp/mochi_models"))
         
@@ -112,11 +120,11 @@ class MochiModel(ModelInterface):
             from genmo.mochi.patches import BetterT5ModelFactory, MochiDualGPUPipeline, PreshardedDitModelFactory
 
             print("Loading Multi-GPU Mochi pipeline...")
-
+            
             text_encoder_factory = BetterT5ModelFactory(self.weights_dir / "t5xxl_fp16.safetensors")
-            dit_factory = DitModelFactory(
-                model_path=str(self.weights_dir / "dit.safetensors"),
-                model_dtype="bf16"
+            dit_factory = PreshardedDitModelFactory(
+                shards_dir=self.shards_dir,
+                model_dtype="bf16"  # Multi-GPU requires bf16
             )
             decoder_factory = DecoderModelFactory(
                 model_path=str(self.weights_dir / "decoder.safetensors")

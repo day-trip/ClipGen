@@ -1,6 +1,5 @@
 import asyncio
 import json
-import logging
 import os
 import signal
 import time
@@ -9,13 +8,14 @@ from pathlib import Path
 from typing import Dict, Any
 
 from inference_engine import InferenceRequest, create_inference_engine
+from monitoring import GPUMonitor, setup_logging
+from prometheus_client import Counter, Histogram, Gauge, start_http_server
 
-def setup_logging():
-    logging.basicConfig(
-        level=logging.INFO,
-        format='%(asctime)s - %(levelname)s - %(message)s'
-    )
-    return logging.getLogger(__name__)
+# Metrics
+JOBS_PROCESSED = Counter('jobs_processed_total', 'Total jobs processed', ['status'])
+PROCESSING_TIME = Histogram('job_processing_seconds', 'Time spent processing jobs')
+GPU_MEMORY_USAGE = Gauge('gpu_memory_used_bytes', 'GPU memory usage', ['gpu_id'])
+QUEUE_DEPTH = Gauge('sqs_queue_depth', 'Current SQS queue depth')
 
 logger = setup_logging()
 
@@ -43,6 +43,9 @@ class SpeechfaceWorker:
             gpu_devices=config.gpu_devices
         )
 
+        # GPU monitoring
+        self.gpu_monitor = GPUMonitor(config.gpu_devices)
+
         # Signal handlers
         signal.signal(signal.SIGTERM, self._shutdown_handler)
         signal.signal(signal.SIGINT, self._shutdown_handler)
@@ -58,11 +61,39 @@ class SpeechfaceWorker:
         # Initialize the inference engine
         await self.inference_engine.initialize()
 
+        # Start the Prometheus metrics server
+        start_http_server(8000)
+
+        # Start GPU monitoring task
+        monitor_task = asyncio.create_task(self._monitor_loop())
+
         # Start the main processing loop
         try:
             await self._process_loop()
         finally:
+            monitor_task.cancel()
             await self.inference_engine.cleanup()
+
+    async def _monitor_loop(self):
+        """Background monitoring task"""
+        while self.running:
+            try:
+                # Update GPU metrics
+                gpu_stats = self.gpu_monitor.get_stats()
+                for gpu_id, stats in gpu_stats.items():
+                    GPU_MEMORY_USAGE.labels(gpu_id=gpu_id).set(stats['memory_used'])
+
+                # Update queue depth (approximate)
+                async with self.session.client('sqs') as sqs:
+                    queue_attrs = await sqs.get_queue_attributes(
+                        QueueUrl=self.config.queue_url,
+                        AttributeNames=['ApproximateNumberOfMessages']
+                    )
+                QUEUE_DEPTH.set(int(queue_attrs['Attributes']['ApproximateNumberOfMessages']))
+
+                await asyncio.sleep(10)  # Monitor every 10 seconds
+            except Exception as e:
+                logger.error(f"Monitoring error: {e}")
 
     async def _process_loop(self):
         """Main SQS processing loop"""
@@ -121,28 +152,30 @@ class SpeechfaceWorker:
             # Update job status to processing
             await self._update_job_status(user_id, job_id, 'processing')
 
-            # Create an inference request with input_data from DynamoDB
-            request = InferenceRequest(
-                job_id=job_id,
-                user_id=user_id,
-                input_data=job_data.get('input_data', {}),  # JSON data from DynamoDB
-                s3_bucket=self.config.s3_bucket
-            )
+            with PROCESSING_TIME.time():
+                # Create an inference request with input_data from DynamoDB
+                request = InferenceRequest(
+                    job_id=job_id,
+                    user_id=user_id,
+                    input_data=job_data.get('input_data', {}),  # JSON data from DynamoDB
+                    s3_bucket=self.config.s3_bucket
+                )
 
-            # Run inference
-            result = await self.inference_engine.process(request)
+                # Run inference
+                result = await self.inference_engine.process(request)
 
-            # Upload the result to S3
-            output_key = f"output/{job_id}.mp4"
-            await self._upload_result(result.video_path, output_key)
+                # Upload the result to S3
+                output_key = f"output/{job_id}.mp4"
+                await self._upload_result(result.video_path, output_key)
 
-            # Update job status to completed
-            await self._update_job_status(
-                user_id, job_id, 'completed',
-                video_url=f"s3://{self.config.s3_bucket}/{output_key}",
-                processing_time=result.processing_time
-            )
+                # Update job status to completed
+                await self._update_job_status(
+                    user_id, job_id, 'completed',
+                    video_url=f"s3://{self.config.s3_bucket}/{output_key}",
+                    processing_time=result.processing_time
+                )
 
+            JOBS_PROCESSED.labels(status='success').inc()
             logger.info(f"Job {job_id} completed successfully")
 
         except Exception as e:
@@ -158,6 +191,8 @@ class SpeechfaceWorker:
             except Exception as e:
                 logger.error(f"Failed to update job status after processing failure: {e}")
                 pass
+
+            JOBS_PROCESSED.labels(status='error').inc()
 
         finally:
             # Always delete the message

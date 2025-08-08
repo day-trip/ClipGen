@@ -1,10 +1,10 @@
 apiVersion: keda.sh/v1alpha1
 kind: ScaledObject
 metadata:
-  name: inference-worker-scaler
+  name: sqs-worker-scaler
 spec:
   scaleTargetRef:
-    name: inference-worker
+    name: sqs-worker
   minReplicaCount: {{ .Values.scaling.minReplicas }}
   maxReplicaCount: {{ .Values.scaling.maxReplicas }}
   triggers:
