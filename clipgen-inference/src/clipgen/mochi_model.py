@@ -252,27 +252,37 @@ class MochiModel(ModelInterface):
         """Save the numpy frames to a MP4 file."""
         print(f"Saving video with shape {frames.shape} to {output_path}")
 
-        # Handle different frame shapes from single-GPU vs multi-GPU pipelines
+        # Handle different frame shapes - both pipelines return 5D tensors
         if len(frames.shape) == 5:
-            # Multi-GPU returns (batch, frames, height, width, channels) - remove batch dim
+            # Both pipelines return (batch, frames, height, width, channels) - remove batch dim
             frames = frames[0]
         elif len(frames.shape) == 4:
-            # Single-GPU returns (frames, height, width, channels) - already correct
+            # Already correct: (frames, height, width, channels)
             pass
         else:
             raise ValueError(f"Unexpected frame shape: {frames.shape}")
 
         print(f"Adjusted frame shape: {frames.shape}")
 
+        # Handle invalid values and ensure proper range
+        frames = np.nan_to_num(frames, nan=0.0, posinf=1.0, neginf=0.0)
+        
         # Ensure values are in [0, 255] range
         if frames.max() <= 1.0:
-            frames = (frames * 255).astype(np.uint8)
+            frames = np.clip(frames * 255, 0, 255).astype(np.uint8)
         else:
-            frames = frames.astype(np.uint8)
+            frames = np.clip(frames, 0, 255).astype(np.uint8)
 
         # Save as MP4
         with imageio.get_writer(str(output_path), fps=fps, codec='libx264') as writer:
-            for frame in frames:
+            for i, frame in enumerate(frames):
+                print(f"Frame {i} shape: {frame.shape}")
+                if i == 0:  # Only check first few frames to avoid spam
+                    print(f"Frame {i} dtype: {frame.dtype}, min: {frame.min()}, max: {frame.max()}")
+                if frame.shape != (480, 848, 3):
+                    print(f"ERROR: Frame {i} has wrong shape {frame.shape}, expected (480, 848, 3)")
+                    if i < 3:  # Only show first few bad frames
+                        print(f"Frame data preview: {frame[:5, :5] if len(frame.shape) >= 2 else frame[:10]}")
                 writer.append_data(frame)
 
     async def cleanup(self) -> None:
