@@ -1,0 +1,83 @@
+{
+  "validApiKey": "sk-proj-abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+  "invalidApiKey": "invalid-key",
+  "testUserId": "user_12345678901234567890123456789012",
+  "testJobId": "job_abcdef1234567890abcdef1234567890ab",
+  "validCreateJobRequest": {
+    "prompt": "A cat walking in a garden",
+    "width": 848,
+    "height": 480,
+    "num_frames": 25,
+    "num_inference_steps": 64,
+    "guidance_scale": 6.0,
+    "negative_prompt": "",
+    "seed": 42
+  },
+  "invalidCreateJobRequest": {
+    "prompt": "",
+    "width": "invalid"
+  },
+  "jobRecord": {
+    "userId": "user_12345678901234567890123456789012",
+    "jobId": "job_abcdef1234567890abcdef1234567890ab",
+    "jobNumber": 1672531200000,
+    "ticketNumber": 1,
+    "status": "queued",
+    "input_data": {
+      "prompt": "A cat walking in a garden",
+      "width": 848,
+      "height": 480,
+      "num_frames": 25,
+      "num_inference_steps": 64,
+      "guidance_scale": 6.0,
+      "negative_prompt": "",
+      "seed": 42
+    },
+    "createdAt": "2023-01-01T00:00:00.000Z",
+    "ttl": 1675209600
+  },
+  "completedJobRecord": {
+    "userId": "user_12345678901234567890123456789012",
+    "jobId": "job_abcdef1234567890abcdef1234567890ab",
+    "jobNumber": 1672531200000,
+    "ticketNumber": 1,
+    "status": "completed",
+    "input_data": {
+      "prompt": "A cat walking in a garden",
+      "width": 848,
+      "height": 480,
+      "num_frames": 25,
+      "num_inference_steps": 64,
+      "guidance_scale": 6.0,
+      "negative_prompt": "",
+      "seed": 42
+    },
+    "createdAt": "2023-01-01T00:00:00.000Z",
+    "completedAt": "2023-01-01T00:05:00.000Z",
+    "videoUrl": "s3://test-bucket/videos/job_abcdef1234567890abcdef1234567890ab.mp4",
+    "ttl": 1675209600
+  },
+  "apiKeyRecord": {
+    "apiKey": "sk-proj-abcd1234567890abcdef1234567890abcdef1234567890abcdef1234567890",
+    "userId": "user_12345678901234567890123456789012",
+    "name": "Test API Key",
+    "isActive": true,
+    "createdAt": "2023-01-01T00:00:00.000Z"
+  },
+  "inactiveApiKeyRecord": {
+    "apiKey": "sk-proj-inactive1234567890abcdef1234567890abcdef1234567890abcdef123456",
+    "userId": "user_12345678901234567890123456789012",
+    "name": "Inactive API Key",
+    "isActive": false,
+    "createdAt": "2023-01-01T00:00:00.000Z"
+  },
+  "cognitoJwtPayload": {
+    "sub": "user_12345678901234567890123456789012",
+    "email": "test@example.com",
+    "cognito:username": "testuser",
+    "iss": "https://cognito-idp.us-east-1.amazonaws.com/us-east-1_TESTPOOL",
+    "aud": "test-client-id",
+    "exp": 1672617600,
+    "iat": 1672531200
+  }
+}

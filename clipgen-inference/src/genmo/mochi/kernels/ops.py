@@ -45,48 +45,48 @@ def fused_residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6, exact_mode=False
     return out2.view_as(x)
 
 
-def fused_conditioning_block(c, mod_x_weight, mod_x_bias, mod_y_weight, mod_y_bias, update_y):
-    """
-    Fused conditioning block:
-    - c: [B, D], bfloat16, CUDA
-    - mod_x_weight: [4*D, D], bfloat16, CUDA
-    - mod_x_bias: [4*D], bfloat16, CUDA
-    - mod_y_weight: [4*D, D] or [D, D], bfloat16, CUDA
-    - mod_y_bias: [4*D] or [D], bfloat16, CUDA
-    - update_y: bool
-
-    Returns: (scale_msa_x, gate_msa_x, scale_mlp_x, gate_mlp_x,
-              scale_msa_y, gate_msa_y, scale_mlp_y, gate_mlp_y)
-    All outputs: [B, D], bfloat16 (last 3 are empty tensors if update_y=False)
-    """
-    if (not c.is_cuda) or c.dtype != torch.bfloat16:
-        # Eager fallback
-        import torch.nn.functional as F
-        c_silu = F.silu(c)
-
-        # mod_x linear
-        mod_x_out = F.linear(c_silu, mod_x_weight, mod_x_bias)  # [B, 4*D]
-        scale_msa_x, gate_msa_x, scale_mlp_x, gate_mlp_x = mod_x_out.chunk(4, dim=1)
-
-        # mod_y linear
-        mod_y_out = F.linear(c_silu, mod_y_weight, mod_y_bias)
-        if update_y:
-            scale_msa_y, gate_msa_y, scale_mlp_y, gate_mlp_y = mod_y_out.chunk(4, dim=1)
-        else:
-            scale_msa_y = mod_y_out
-            gate_msa_y = torch.empty(0, dtype=c.dtype, device=c.device)
-            scale_mlp_y = torch.empty(0, dtype=c.dtype, device=c.device)
-            gate_mlp_y = torch.empty(0, dtype=c.dtype, device=c.device)
-
-        return (scale_msa_x, gate_msa_x, scale_mlp_x, gate_mlp_x,
-                scale_msa_y, gate_msa_y, scale_mlp_y, gate_mlp_y)
-
-    # CUDA path
-    return torch.ops.mochi.fused_conditioning_block(
-        c.contiguous(),
-        mod_x_weight.contiguous(),
-        mod_x_bias.contiguous(),
-        mod_y_weight.contiguous(),
-        mod_y_bias.contiguous(),
-        bool(update_y)
-    )
+# def fused_conditioning_block(c, mod_x_weight, mod_x_bias, mod_y_weight, mod_y_bias, update_y):
+#     """
+#     Fused conditioning block:
+#     - c: [B, D], bfloat16, CUDA
+#     - mod_x_weight: [4*D, D], bfloat16, CUDA
+#     - mod_x_bias: [4*D], bfloat16, CUDA
+#     - mod_y_weight: [4*D, D] or [D, D], bfloat16, CUDA
+#     - mod_y_bias: [4*D] or [D], bfloat16, CUDA
+#     - update_y: bool
+#
+#     Returns: (scale_msa_x, gate_msa_x, scale_mlp_x, gate_mlp_x,
+#               scale_msa_y, gate_msa_y, scale_mlp_y, gate_mlp_y)
+#     All outputs: [B, D], bfloat16 (last 3 are empty tensors if update_y=False)
+#     """
+#     if (not c.is_cuda) or c.dtype != torch.bfloat16:
+#         # Eager fallback
+#         import torch.nn.functional as F
+#         c_silu = F.silu(c)
+#
+#         # mod_x linear
+#         mod_x_out = F.linear(c_silu, mod_x_weight, mod_x_bias)  # [B, 4*D]
+#         scale_msa_x, gate_msa_x, scale_mlp_x, gate_mlp_x = mod_x_out.chunk(4, dim=1)
+#
+#         # mod_y linear
+#         mod_y_out = F.linear(c_silu, mod_y_weight, mod_y_bias)
+#         if update_y:
+#             scale_msa_y, gate_msa_y, scale_mlp_y, gate_mlp_y = mod_y_out.chunk(4, dim=1)
+#         else:
+#             scale_msa_y = mod_y_out
+#             gate_msa_y = torch.empty(0, dtype=c.dtype, device=c.device)
+#             scale_mlp_y = torch.empty(0, dtype=c.dtype, device=c.device)
+#             gate_mlp_y = torch.empty(0, dtype=c.dtype, device=c.device)
+#
+#         return (scale_msa_x, gate_msa_x, scale_mlp_x, gate_mlp_x,
+#                 scale_msa_y, gate_msa_y, scale_mlp_y, gate_mlp_y)
+#
+#     # CUDA path
+#     return torch.ops.mochi.fused_conditioning_block(
+#         c.contiguous(),
+#         mod_x_weight.contiguous(),
+#         mod_x_bias.contiguous(),
+#         mod_y_weight.contiguous(),
+#         mod_y_bias.contiguous(),
+#         bool(update_y)
+#     )

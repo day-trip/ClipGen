@@ -33,7 +33,7 @@ if torch.cuda.is_available() or os.environ.get('FORCE_CUDA', '').lower() in ('1'
     # Fused RMSNorm kernel
     ext_modules.append(create_cuda_extension('genmo.mochi.kernels._C.fused_rmsnorm', os.path.join('src', 'genmo', 'mochi', 'kernels', 'cuda', 'fused_rmsnorm.cu')))
     # Fused conditioning
-    ext_modules.append(create_cuda_extension('genmo.mochi.kernels._C.fused_conditioning', os.path.join('src', 'genmo', 'mochi', 'kernels', 'cuda', 'fused_conditioning.cu')))
+    # ext_modules.append(create_cuda_extension('genmo.mochi.kernels._C.fused_conditioning', os.path.join('src', 'genmo', 'mochi', 'kernels', 'cuda', 'fused_conditioning.cu')))
 
 setup(
     name='clipgen-inference',

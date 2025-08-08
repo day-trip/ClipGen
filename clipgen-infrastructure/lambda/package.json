@@ -3,8 +3,12 @@
   "module": "index.ts",
   "type": "module",
   "private": true,
+  "scripts": {
+    "test": "jest"
+  },
   "devDependencies": {
-    "@types/bun": "latest"
+    "@types/bun": "latest",
+    "aws-sdk-client-mock": "^4.1.0"
   },
   "peerDependencies": {
     "typescript": "^5"

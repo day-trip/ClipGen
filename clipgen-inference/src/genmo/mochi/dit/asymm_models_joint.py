@@ -29,7 +29,7 @@ from genmo.mochi.dit.utils import (
     modulate,
     pad_and_split_xy,
 )
-from genmo.mochi.kernels.ops import fused_residual_tanh_gated_rmsnorm, fused_conditioning_block
+from genmo.mochi.kernels.ops import fused_residual_tanh_gated_rmsnorm
 from genmo.mochi.util.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
 
 COMPILE_FINAL_LAYER = os.environ.get("COMPILE_DIT") == "1"
