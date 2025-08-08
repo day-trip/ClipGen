@@ -60,14 +60,14 @@ def fused_residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6, exact_mode=False
     Fused CUDA implementation of residual tanh-gated RMSNorm.
     
     Args:
-        x: [N, D] residual input tensor (bfloat16)
-        x_res: [N, D] tensor to normalize (bfloat16)  
-        gate: [N] gate values (bfloat16)
+        x: [..., D] residual input tensor (bfloat16) - supports 2D or 3D
+        x_res: [..., D] tensor to normalize (bfloat16) - supports 2D or 3D  
+        gate: [...] gate values (bfloat16) - supports 1D or 2D
         eps: epsilon for numerical stability
         exact_mode: if True, match PyTorch precision exactly
         
     Returns:
-        [N, D] output tensor (bfloat16)
+        [..., D] output tensor (bfloat16) - same shape as input
     """
     if not torch.cuda.is_available() or not x.is_cuda:
         return residual_tanh_gated_rmsnorm_pytorch(x, x_res, gate, eps)
@@ -81,7 +81,18 @@ def fused_residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6, exact_mode=False
         )
         return residual_tanh_gated_rmsnorm_pytorch(x, x_res, gate, eps)
     
-    return FusedResidualTanhGatedRMSNorm.apply(x, x_res, gate, eps, exact_mode)
+    # Handle 3D tensors by reshaping to 2D
+    original_shape = x.shape
+    if len(original_shape) == 3:
+        B, M, D = original_shape
+        x_2d = x.view(B * M, D)
+        x_res_2d = x_res.view(B * M, D)
+        gate_2d = gate.view(B * M)
+        
+        output_2d = FusedResidualTanhGatedRMSNorm.apply(x_2d, x_res_2d, gate_2d, eps, exact_mode)
+        return output_2d.view(original_shape)
+    else:
+        return FusedResidualTanhGatedRMSNorm.apply(x, x_res, gate, eps, exact_mode)
 
 # Public API - auto-select best implementation
 def residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6):
