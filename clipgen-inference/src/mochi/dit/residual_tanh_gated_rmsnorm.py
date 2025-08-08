@@ -3,7 +3,7 @@ import torch
 # Try to import optimized CUDA kernel
 try:
     from ..kernels import fused_residual_tanh_gated_rmsnorm as _optimized_rmsnorm
-    _USE_CUDA_KERNEL = True
+    _USE_CUDA_KERNEL = False
     print("🚀 Using optimized CUDA kernel for residual_tanh_gated_rmsnorm")
 except ImportError:
     _USE_CUDA_KERNEL = False
