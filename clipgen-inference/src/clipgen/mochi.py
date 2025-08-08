@@ -16,7 +16,7 @@ from clipgen.util import dump_mochi_weights_info
 # Multi-GPU configuration
 # Benefits: Distributes model weights across GPUs, faster inference for large models
 # Tradeoffs: Added complexity, Ray overhead, potential for distributed failures
-USE_MULTI_GPU = False
+USE_MULTI_GPU = True
 
 class MochiModel(ModelInterface):
     def __init__(self):
@@ -112,11 +112,11 @@ class MochiModel(ModelInterface):
             from genmo.mochi.patches import BetterT5ModelFactory, MochiDualGPUPipeline, PreshardedDitModelFactory
 
             print("Loading Multi-GPU Mochi pipeline...")
-            
+
             text_encoder_factory = BetterT5ModelFactory(self.weights_dir / "t5xxl_fp16.safetensors")
-            dit_factory = PreshardedDitModelFactory(
-                shards_dir=self.shards_dir,
-                model_dtype="bf16"  # Multi-GPU requires bf16
+            dit_factory = DitModelFactory(
+                model_path=str(self.weights_dir / "dit.safetensors"),
+                model_dtype="bf16"
             )
             decoder_factory = DecoderModelFactory(
                 model_path=str(self.weights_dir / "decoder.safetensors")
