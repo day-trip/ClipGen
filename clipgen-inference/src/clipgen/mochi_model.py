@@ -21,7 +21,7 @@ print("Mochi path:", mochi.__file__)
 # Multi-GPU configuration
 # Benefits: Distributes model weights across GPUs, faster inference for large models
 # Tradeoffs: Added complexity, Ray overhead, potential for distributed failures
-USE_MULTI_GPU = True
+USE_MULTI_GPU = False
 
 class MochiModel(ModelInterface):
     def __init__(self):
