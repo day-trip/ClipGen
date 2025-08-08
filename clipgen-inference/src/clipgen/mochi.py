@@ -13,6 +13,11 @@ from model_interface import ModelInterface
 from clipgen.coordinator import coordinate_pod_work
 from clipgen.util import dump_mochi_weights_info
 
+import sys
+print("Python path:", sys.path)
+import mochi
+print("Mochi path:", mochi.__file__)
+
 # Multi-GPU configuration
 # Benefits: Distributes model weights across GPUs, faster inference for large models
 # Tradeoffs: Added complexity, Ray overhead, potential for distributed failures

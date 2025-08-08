@@ -1,3 +1,5 @@
+import mochi.pipelines
+
 import asyncio
 from clipgen.mochi import MochiModel
 
