@@ -17,7 +17,7 @@ describe('AuthConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::Cognito::UserPool', {
-      UserPoolName: 'speechface-users',
+      UserPoolName: 'clipgen-users',
       AutoVerifiedAttributes: ['email'],
       UsernameAttributes: ['email'],
       Policies: {

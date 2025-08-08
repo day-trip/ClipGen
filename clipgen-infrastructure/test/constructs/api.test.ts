@@ -55,7 +55,7 @@ describe('ApiConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
-      Name: 'speechface-api',
+      Name: 'clipgen-api',
       ProtocolType: 'HTTP',
       CorsConfiguration: {
         AllowOrigins: ['*'],
@@ -74,18 +74,18 @@ describe('ApiConstruct', () => {
     const functions = template.findResources('AWS::Lambda::Function');
     const functionNames = Object.values(functions)
       .map((fn: any) => fn.Properties?.FunctionName)
-      .filter(name => name?.startsWith('speechface-'));
+      .filter(name => name?.startsWith('clipgen-'));
 
-    expect(functionNames).toContain('speechface-create-job');
-    expect(functionNames).toContain('speechface-get-job');
-    expect(functionNames).toContain('speechface-list-jobs');
-    expect(functionNames).toContain('speechface-create-api-key');
-    expect(functionNames).toContain('speechface-list-api-keys');
-    expect(functionNames).toContain('speechface-delete-api-key');
-    expect(functionNames).toContain('speechface-list-logs');
-    expect(functionNames).toContain('speechface-download-video');
-    expect(functionNames).toContain('speechface-internal-create-job');
-    expect(functionNames).toContain('speechface-internal-get-job');
+    expect(functionNames).toContain('clipgen-create-job');
+    expect(functionNames).toContain('clipgen-get-job');
+    expect(functionNames).toContain('clipgen-list-jobs');
+    expect(functionNames).toContain('clipgen-create-api-key');
+    expect(functionNames).toContain('clipgen-list-api-keys');
+    expect(functionNames).toContain('clipgen-delete-api-key');
+    expect(functionNames).toContain('clipgen-list-logs');
+    expect(functionNames).toContain('clipgen-download-video');
+    expect(functionNames).toContain('clipgen-internal-create-job');
+    expect(functionNames).toContain('clipgen-internal-get-job');
   });
 
   test('creates correct API routes', () => {
@@ -115,12 +115,12 @@ describe('ApiConstruct', () => {
     const template = Template.fromStack(stack);
 
     const functions = template.findResources('AWS::Lambda::Function');
-    const speechfaceFunctions = Object.values(functions).filter(
-      (fn: any) => fn.Properties?.FunctionName?.startsWith('speechface-')
+    const clipgenFunctions = Object.values(functions).filter(
+      (fn: any) => fn.Properties?.FunctionName?.startsWith('clipgen-')
     );
     
     // At least some functions should have environment variables
-    const functionsWithEnvVars = speechfaceFunctions.filter(
+    const functionsWithEnvVars = clipgenFunctions.filter(
       (fn: any) => fn.Properties?.Environment?.Variables
     );
 
@@ -134,14 +134,14 @@ describe('ApiConstruct', () => {
 
     // Check that Lambda functions exist with basic properties
     const functions = template.findResources('AWS::Lambda::Function');
-    const speechfaceFunctions = Object.values(functions).filter(
-      (fn: any) => fn.Properties?.FunctionName?.startsWith('speechface-')
+    const clipgenFunctions = Object.values(functions).filter(
+      (fn: any) => fn.Properties?.FunctionName?.startsWith('clipgen-')
     );
 
-    expect(speechfaceFunctions.length).toBeGreaterThan(8);
+    expect(clipgenFunctions.length).toBeGreaterThan(8);
     
     // All functions should have runtime specified
-    speechfaceFunctions.forEach((fn: any) => {
+    clipgenFunctions.forEach((fn: any) => {
       expect(fn.Properties?.Runtime).toBe('nodejs18.x');
     });
   });

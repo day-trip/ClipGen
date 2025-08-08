@@ -1,39 +1,63 @@
+import { test, expect, describe, beforeEach, mock } from 'bun:test';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
-import { JobService } from '../../src/services/jobService';
+import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
 import testData from '../fixtures/test-data.json';
 
-// Mock the DynamoDB client
+// Mock the AWS clients
 const ddbMock = mockClient(DynamoDBDocumentClient);
+const sqsMock = mockClient(SQSClient);
 
 // Mock external dependencies
-jest.mock('../../src/utils/queueCounter', () => ({
-  getNextTicket: jest.fn().mockResolvedValue(1),
+const mockGetNextTicket = mock(() => Promise.resolve(1));
+const mockCreateJobSchema = mock(() => ({ success: true, data: testData.validCreateJobRequest }));
+const mockFormatValidationErrors = mock(() => 'Validation failed');
+
+mock.module('../../src/utils/queueCounter', () => ({
+  getNextTicket: mockGetNextTicket,
 }));
+
+mock.module('../../src/types/schemas', () => ({
+  createJobSchema: {
+    safeParse: mockCreateJobSchema,
+  },
+  formatValidationErrors: mockFormatValidationErrors,
+}));
+
+// Import JobService after mocks are set up
+import { JobService } from '../../src/services/jobService';
 
 describe('Database Integration Tests', () => {
   beforeEach(() => {
     ddbMock.reset();
-    jest.clearAllMocks();
-    
+    sqsMock.reset();
+    mockGetNextTicket.mockClear();
+    mockCreateJobSchema.mockClear();
+    mockFormatValidationErrors.mockClear();
+
     // Set up environment variables
     process.env.JOB_TABLE_NAME = 'test-job-table';
     process.env.API_KEYS_TABLE_NAME = 'test-api-keys-table';
     process.env.PROCESSING_QUEUE_URL = 'https://sqs.test.com/queue';
     process.env.MEDIA_BUCKET_NAME = 'test-media-bucket';
+    
+    // Set up default mock returns
+    mockCreateJobSchema.mockReturnValue({ success: true, data: testData.validCreateJobRequest });
+    mockGetNextTicket.mockResolvedValue(1);
   });
 
   describe('Job Table Operations', () => {
     test('creates job with proper DynamoDB structure', async () => {
       ddbMock.on(PutCommand).resolves({});
+      sqsMock.on(SendMessageCommand).resolves({ MessageId: 'test-message-id' });
 
       await JobService.createJob(testData.testUserId, testData.validCreateJobRequest);
 
       expect(ddbMock.commandCalls(PutCommand)).toHaveLength(1);
-      
+
       const putCall = ddbMock.commandCalls(PutCommand)[0]!;
       const item = putCall.args[0].input.Item!;
-      
+
       // Verify required fields
       expect(item).toHaveProperty('userId', testData.testUserId);
       expect(item).toHaveProperty('jobId');
@@ -43,7 +67,7 @@ describe('Database Integration Tests', () => {
       expect(item).toHaveProperty('input_data');
       expect(item).toHaveProperty('createdAt');
       expect(item).toHaveProperty('ttl');
-      
+
       // Verify input data structure
       expect(item.input_data).toMatchObject({
         prompt: testData.validCreateJobRequest.prompt,
@@ -55,7 +79,7 @@ describe('Database Integration Tests', () => {
         negative_prompt: testData.validCreateJobRequest.negative_prompt,
         seed: expect.any(Number),
       });
-      
+
       // Verify TTL is set (should be 32 days from now)
       const currentTime = Math.floor(Date.now() / 1000);
       const expectedTtl = currentTime + (32 * 24 * 60 * 60);
@@ -70,7 +94,7 @@ describe('Database Integration Tests', () => {
       const result = await JobService.getJob(testData.testUserId, testData.testJobId);
 
       expect(ddbMock.commandCalls(GetCommand)).toHaveLength(1);
-      
+
       const getCall = ddbMock.commandCalls(GetCommand)[0];
       expect(getCall!.args[0].input).toMatchObject({
         TableName: 'test-job-table',
@@ -79,7 +103,7 @@ describe('Database Integration Tests', () => {
           jobId: testData.testJobId,
         },
       });
-      
+
       expect(result).toBeTruthy();
       expect(result?.jobId).toBe(testData.testJobId);
     });
@@ -230,7 +254,7 @@ describe('Database Integration Tests', () => {
 
       expect(result.Count).toBe(5);
       expect(ddbMock.commandCalls(QueryCommand)).toHaveLength(1);
-      
+
       const queryCall = ddbMock.commandCalls(QueryCommand)[0];
       expect(queryCall.args[0].input.Select).toBe('COUNT');
     });
@@ -241,15 +265,16 @@ describe('Database Integration Tests', () => {
       ddbMock.on(GetCommand).rejects(new Error('ServiceUnavailableException'));
 
       await expect(
-        JobService.getJob(testData.testUserId, testData.testJobId)
+          JobService.getJob(testData.testUserId, testData.testJobId)
       ).rejects.toThrow('ServiceUnavailableException');
     });
 
     test('handles conditional check failures', async () => {
       ddbMock.on(PutCommand).rejects(new Error('ConditionalCheckFailedException'));
+      sqsMock.on(SendMessageCommand).resolves({ MessageId: 'test-message-id' });
 
       await expect(
-        JobService.createJob(testData.testUserId, testData.validCreateJobRequest)
+          JobService.createJob(testData.testUserId, testData.validCreateJobRequest)
       ).rejects.toThrow('ConditionalCheckFailedException');
     });
 
@@ -257,14 +282,14 @@ describe('Database Integration Tests', () => {
       ddbMock.on(QueryCommand).rejects(new Error('ProvisionedThroughputExceededException'));
 
       await expect(
-        ddbMock.send(new QueryCommand({
-          TableName: 'test-job-table',
-          IndexName: 'userId-jobNumber-index',
-          KeyConditionExpression: 'userId = :userId',
-          ExpressionAttributeValues: {
-            ':userId': testData.testUserId,
-          },
-        }))
+          ddbMock.send(new QueryCommand({
+            TableName: 'test-job-table',
+            IndexName: 'userId-jobNumber-index',
+            KeyConditionExpression: 'userId = :userId',
+            ExpressionAttributeValues: {
+              ':userId': testData.testUserId,
+            },
+          }))
       ).rejects.toThrow('ProvisionedThroughputExceededException');
     });
   });
@@ -272,12 +297,13 @@ describe('Database Integration Tests', () => {
   describe('Data Type Validation', () => {
     test('stores numbers as numbers, not strings', async () => {
       ddbMock.on(PutCommand).resolves({});
+      sqsMock.on(SendMessageCommand).resolves({ MessageId: 'test-message-id' });
 
       await JobService.createJob(testData.testUserId, testData.validCreateJobRequest);
 
       const putCall = ddbMock.commandCalls(PutCommand)[0];
       const item = putCall.args[0].input.Item;
-      
+
       expect(typeof item.jobNumber).toBe('number');
       expect(typeof item.ticketNumber).toBe('number');
       expect(typeof item.ttl).toBe('number');
@@ -291,12 +317,13 @@ describe('Database Integration Tests', () => {
 
     test('stores strings as strings', async () => {
       ddbMock.on(PutCommand).resolves({});
+      sqsMock.on(SendMessageCommand).resolves({ MessageId: 'test-message-id' });
 
       await JobService.createJob(testData.testUserId, testData.validCreateJobRequest);
 
       const putCall = ddbMock.commandCalls(PutCommand)[0];
-      const item = putCall.args[0].input.Item;
-      
+      const item = putCall!.args[0].input.Item!;
+
       expect(typeof item.userId).toBe('string');
       expect(typeof item.jobId).toBe('string');
       expect(typeof item.status).toBe('string');

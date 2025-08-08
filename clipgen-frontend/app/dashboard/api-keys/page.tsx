@@ -16,7 +16,7 @@ async function ApiKeysList() {
                 </svg>
             </div>
             <h3 className="text-lg font-medium text-gray-900 mb-2">No API Keys</h3>
-            <p className="text-gray-500">Create your first API key to start using the Speechface API.</p>
+            <p className="text-gray-500">Create your first API key to start using the Clipgen API.</p>
         </div>
     }
 

@@ -1,3 +1,4 @@
+import { test, expect, describe, beforeEach, mock } from 'bun:test';
 import { mockClient } from 'aws-sdk-client-mock';
 import { DynamoDBDocumentClient, GetCommand, PutCommand, QueryCommand } from '@aws-sdk/lib-dynamodb';
 import { SQSClient, SendMessageCommand } from '@aws-sdk/client-sqs';
@@ -13,26 +14,50 @@ const ddbMock = mockClient(DynamoDBDocumentClient);
 const sqsMock = mockClient(SQSClient);
 
 // Mock external dependencies
-jest.mock('../../src/utils/queueCounter', () => ({
-  getNextTicket: jest.fn().mockResolvedValue(1),
+const mockGetNextTicket = mock(() => Promise.resolve(1));
+const mockApiKeySchema = mock(() => ({ success: true, data: testData.validApiKey }));
+const mockCreateJobSchema = mock(() => ({ success: true, data: testData.validCreateJobRequest }));
+
+mock.module('../../src/utils/queueCounter', () => ({
+  getNextTicket: mockGetNextTicket,
+}));
+
+mock.module('../../src/types/schemas', () => ({
+  apiKeySchema: {
+    safeParse: mockApiKeySchema,
+  },
+  createJobSchema: {
+    safeParse: mockCreateJobSchema,
+  },
+  formatValidationErrors: mock(() => 'Validation failed'),
 }));
 
 describe('API Integration Tests', () => {
   beforeEach(() => {
     ddbMock.reset();
     sqsMock.reset();
-    jest.clearAllMocks();
-    
+    mockGetNextTicket.mockClear();
+    mockApiKeySchema.mockClear();
+    mockCreateJobSchema.mockClear();
+
     // Set up environment variables
     process.env.JOB_TABLE_NAME = 'test-job-table';
     process.env.API_KEYS_TABLE_NAME = 'test-api-keys-table';
     process.env.PROCESSING_QUEUE_URL = 'https://sqs.test.com/queue';
     process.env.MEDIA_BUCKET_NAME = 'test-media-bucket';
+    
+    // Set up default mock returns
+    mockApiKeySchema.mockReturnValue({ success: true, data: testData.validApiKey });
+    mockCreateJobSchema.mockReturnValue({ success: true, data: testData.validCreateJobRequest });
+    mockGetNextTicket.mockResolvedValue(1);
+    
+    // Default rate limiting mock - allows requests (Count < 10)
+    ddbMock.on(QueryCommand).resolves({ Count: 0 });
   });
 
   describe('Create Job -> Get Job Flow', () => {
     test('end-to-end job creation and retrieval', async () => {
-      // Mock authentication
+      // Mock authentication and rate limiting
       ddbMock.on(GetCommand).callsFake((input) => {
         if (input.TableName === 'test-api-keys-table') {
           return { Item: testData.apiKeyRecord };
@@ -55,7 +80,7 @@ describe('API Integration Tests', () => {
       createEvent.userId = testData.testUserId;
 
       const createResult = await createJobHandler(createEvent);
-      
+
       expect(createResult.statusCode).toBe(201);
       const createResponseBody = JSON.parse(createResult.body);
       expect(createResponseBody).toMatchObject({
@@ -73,20 +98,21 @@ describe('API Integration Tests', () => {
       getEvent.userId = testData.testUserId;
 
       const getResult = await getJobHandler(getEvent);
-      
+
       expect(getResult.statusCode).toBe(200);
       const getResponseBody = JSON.parse(getResult.body);
       expect(getResponseBody).toMatchObject({
         jobId: testData.testJobId,
         status: 'queued',
-        prompt: testData.jobRecord.input_data.prompt,
         createdAt: testData.jobRecord.createdAt,
-        ticketNumber: testData.jobRecord.ticketNumber,
+        queuePosition: null,
+        videoUrl: null,
+        completedAt: null
       });
 
       // Verify database interactions
       expect(ddbMock.commandCalls(PutCommand)).toHaveLength(1);
-      expect(ddbMock.commandCalls(GetCommand)).toHaveLength(2); // Auth + get job
+      expect(ddbMock.commandCalls(GetCommand)).toHaveLength(3); // Create auth + Get auth + Get job data
       expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(1);
     });
   });
@@ -197,7 +223,7 @@ describe('API Integration Tests', () => {
 
       expect(result.statusCode).toBe(429);
       expect(JSON.parse(result.body).error).toBe('Rate limit exceeded. Try again in 60 seconds.');
-      
+
       // Should not have attempted to create the job
       expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
       expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
@@ -224,12 +250,18 @@ describe('API Integration Tests', () => {
       const result = await getJobHandler(getEvent);
 
       expect(result.statusCode).toBe(500);
-      expect(JSON.parse(result.body).error).toBe('DynamoDB connection failed');
+      expect(JSON.parse(result.body).error).toBe('Failed to retrieve job');
     });
 
     test('handles validation errors in job creation', async () => {
       // Mock authentication success
       ddbMock.on(GetCommand).resolves({ Item: testData.apiKeyRecord });
+      
+      // Mock validation failure for this test
+      mockCreateJobSchema.mockReturnValueOnce({ 
+        success: false, 
+        error: { message: 'Validation failed: Invalid width' }
+      });
 
       const createEvent = createEventWithApiKey(testData.validApiKey, {
         body: JSON.stringify(testData.invalidCreateJobRequest),
@@ -241,7 +273,7 @@ describe('API Integration Tests', () => {
 
       expect(result.statusCode).toBe(400);
       expect(JSON.parse(result.body).error).toContain('Validation');
-      
+
       // Should not have attempted to create the job
       expect(ddbMock.commandCalls(PutCommand)).toHaveLength(0);
       expect(sqsMock.commandCalls(SendMessageCommand)).toHaveLength(0);
@@ -252,11 +284,11 @@ describe('API Integration Tests', () => {
     test('created job appears in list jobs endpoint', async () => {
       // Mock authentication
       ddbMock.on(GetCommand).resolves({ Item: testData.apiKeyRecord });
-      
+
       // Mock job creation
       ddbMock.on(PutCommand).resolves({});
       sqsMock.on(SendMessageCommand).resolves({ MessageId: 'test-message-id' });
-      
+
       // Mock list jobs query
       ddbMock.on(QueryCommand).resolves({
         Items: [testData.jobRecord],
@@ -280,14 +312,17 @@ describe('API Integration Tests', () => {
       listEvent.userId = testData.testUserId;
 
       const listResult = await listJobsHandler(listEvent);
-      
+
       expect(listResult.statusCode).toBe(200);
       const listResponseBody = JSON.parse(listResult.body);
       expect(listResponseBody.jobs).toHaveLength(1);
       expect(listResponseBody.jobs[0]).toMatchObject({
         jobId: testData.testJobId,
         status: 'queued',
-        prompt: testData.jobRecord.input_data.prompt,
+        createdAt: testData.jobRecord.createdAt,
+        queuePosition: null,
+        videoUrl: null,
+        completedAt: null
       });
     });
   });

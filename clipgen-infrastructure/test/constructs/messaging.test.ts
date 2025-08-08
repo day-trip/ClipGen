@@ -26,7 +26,7 @@ describe('MessagingConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::SQS::Queue', {
-      QueueName: 'speechface-processing',
+      QueueName: 'clipgen-processing',
       VisibilityTimeout: 600, // 10 minutes
       ReceiveMessageWaitTimeSeconds: 20,
       MessageRetentionPeriod: 604800 // 7 days in seconds
@@ -39,7 +39,7 @@ describe('MessagingConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::SQS::Queue', {
-      QueueName: 'speechface-processing-dlq',
+      QueueName: 'clipgen-processing-dlq',
       MessageRetentionPeriod: 1209600 // 14 days in seconds
     });
   });
@@ -52,7 +52,7 @@ describe('MessagingConstruct', () => {
     // Find the processing queue and check its redrive policy
     const queues = template.findResources('AWS::SQS::Queue');
     const processingQueue = Object.values(queues).find(
-      queue => queue.Properties?.QueueName === 'speechface-processing'
+      queue => queue.Properties?.QueueName === 'clipgen-processing'
     );
 
     expect(processingQueue).toBeDefined();
@@ -68,7 +68,7 @@ describe('MessagingConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::SQS::Queue', {
-      QueueName: 'speechface-processing',
+      QueueName: 'clipgen-processing',
       VisibilityTimeout: 900 // 15 minutes
     });
   });
@@ -82,7 +82,7 @@ describe('MessagingConstruct', () => {
 
     const queues = template.findResources('AWS::SQS::Queue');
     const processingQueue = Object.values(queues).find(
-      queue => queue.Properties?.QueueName === 'speechface-processing'
+      queue => queue.Properties?.QueueName === 'clipgen-processing'
     );
 
     expect(processingQueue?.Properties?.RedrivePolicy?.maxReceiveCount).toBe(5);
@@ -97,12 +97,12 @@ describe('MessagingConstruct', () => {
 
     // Both queues should use the custom retention period
     template.hasResourceProperties('AWS::SQS::Queue', {
-      QueueName: 'speechface-processing',
+      QueueName: 'clipgen-processing',
       MessageRetentionPeriod: 864000 // 10 days in seconds
     });
 
     template.hasResourceProperties('AWS::SQS::Queue', {
-      QueueName: 'speechface-processing-dlq',
+      QueueName: 'clipgen-processing-dlq',
       MessageRetentionPeriod: 864000 // 10 days in seconds
     });
   });
@@ -115,7 +115,7 @@ describe('MessagingConstruct', () => {
     // Processing queue should reference the DLQ
     const queues = template.findResources('AWS::SQS::Queue');
     const processingQueue = Object.values(queues).find(
-      queue => queue.Properties?.QueueName === 'speechface-processing'
+      queue => queue.Properties?.QueueName === 'clipgen-processing'
     );
 
     expect(processingQueue?.Properties?.RedrivePolicy?.deadLetterTargetArn).toBeDefined();

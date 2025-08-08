@@ -26,7 +26,7 @@ describe('DatabaseConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: 'speechface-jobs',
+      TableName: 'clipgen-jobs',
       KeySchema: [
         { AttributeName: 'userId', KeyType: 'HASH' },
         { AttributeName: 'jobId', KeyType: 'RANGE' }
@@ -76,7 +76,7 @@ describe('DatabaseConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: 'speechface-connections',
+      TableName: 'clipgen-connections',
       KeySchema: [
         { AttributeName: 'connectionId', KeyType: 'HASH' }
       ],
@@ -94,7 +94,7 @@ describe('DatabaseConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: 'speechface-connections',
+      TableName: 'clipgen-connections',
       GlobalSecondaryIndexes: [
         {
           IndexName: 'userId-index',
@@ -118,7 +118,7 @@ describe('DatabaseConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: 'speechface-api-keys',
+      TableName: 'clipgen-api-keys',
       KeySchema: [
         { AttributeName: 'apiKey', KeyType: 'HASH' }
       ],
@@ -140,7 +140,7 @@ describe('DatabaseConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::DynamoDB::Table', {
-      TableName: 'speechface-queue-counter',
+      TableName: 'clipgen-queue-counter',
       KeySchema: [
         { AttributeName: 'id', KeyType: 'HASH' }
       ],

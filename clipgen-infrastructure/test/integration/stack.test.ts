@@ -1,14 +1,14 @@
 import * as cdk from 'aws-cdk-lib';
 import { Template } from 'aws-cdk-lib/assertions';
-import { SpeechfaceInfrastructureStack } from '../../lib/speechface-infrastructure-stack';
+import {ClipgenInfrastructureStack} from "../../lib/clipgen-infrastructure-stack";
 
-describe('SpeechfaceInfrastructureStack Integration', () => {
+describe('ClipgenInfrastructureStack Integration', () => {
   let app: cdk.App;
-  let stack: SpeechfaceInfrastructureStack;
+  let stack: ClipgenInfrastructureStack;
 
   beforeEach(() => {
     app = new cdk.App();
-    stack = new SpeechfaceInfrastructureStack(app, 'TestStack', {
+    stack = new ClipgenInfrastructureStack(app, 'TestStack', {
       env: { account: '123456789012', region: 'us-east-1' }
     });
   });
@@ -39,10 +39,10 @@ describe('SpeechfaceInfrastructureStack Integration', () => {
 
     // Lambda Functions (10 HTTP API + 4 WebSocket)
     const functions = template.findResources('AWS::Lambda::Function');
-    const speechfaceFunctions = Object.values(functions).filter(
-      (fn: any) => fn.Properties?.FunctionName?.startsWith('speechface-')
+    const clipgenFunctions = Object.values(functions).filter(
+      (fn: any) => fn.Properties?.FunctionName?.startsWith('clipgen-')
     );
-    expect(speechfaceFunctions.length).toBeGreaterThanOrEqual(14);
+    expect(clipgenFunctions.length).toBeGreaterThanOrEqual(14);
   });
 
   test('outputs all required stack values', () => {
@@ -63,11 +63,11 @@ describe('SpeechfaceInfrastructureStack Integration', () => {
 
     // Check that Lambda functions exist
     const functions = template.findResources('AWS::Lambda::Function');
-    const speechfaceFunctions = Object.values(functions).filter(
-      (fn: any) => fn.Properties?.FunctionName?.startsWith('speechface-')
+    const clipgenFunctions = Object.values(functions).filter(
+      (fn: any) => fn.Properties?.FunctionName?.startsWith('clipgen-')
     );
 
-    expect(speechfaceFunctions.length).toBeGreaterThan(10);
+    expect(clipgenFunctions.length).toBeGreaterThan(10);
 
     // Check that functions have IAM roles (indicating proper permissions)
     const roles = template.findResources('AWS::IAM::Role');
@@ -132,25 +132,25 @@ describe('SpeechfaceInfrastructureStack Integration', () => {
   test('resource naming follows conventions', () => {
     const template = Template.fromStack(stack);
 
-    // DynamoDB tables should have speechface prefix
+    // DynamoDB tables should have clipgen prefix
     const tables = template.findResources('AWS::DynamoDB::Table');
     Object.values(tables).forEach((table: any) => {
-      expect(table.Properties?.TableName).toMatch(/^speechface-/);
+      expect(table.Properties?.TableName).toMatch(/^clipgen-/);
     });
 
-    // SQS queues should have speechface prefix
+    // SQS queues should have clipgen prefix
     const queues = template.findResources('AWS::SQS::Queue');
     Object.values(queues).forEach((queue: any) => {
       if (queue.Properties?.QueueName) {
-        expect(queue.Properties.QueueName).toMatch(/^speechface-/);
+        expect(queue.Properties.QueueName).toMatch(/^clipgen-/);
       }
     });
 
-    // Lambda functions should have speechface prefix
+    // Lambda functions should have clipgen prefix
     const functions = template.findResources('AWS::Lambda::Function');
     Object.values(functions).forEach((fn: any) => {
-      if (fn.Properties?.FunctionName?.startsWith('speechface-')) {
-        expect(fn.Properties.FunctionName).toMatch(/^speechface-/);
+      if (fn.Properties?.FunctionName?.startsWith('clipgen-')) {
+        expect(fn.Properties.FunctionName).toMatch(/^clipgen-/);
       }
     });
   });
@@ -172,7 +172,7 @@ describe('SpeechfaceInfrastructureStack Integration', () => {
 
   test('environment-specific configurations can be overridden', () => {
     // Test with production-like settings
-    const prodStack = new SpeechfaceInfrastructureStack(app, 'ProdStack', {
+    const prodStack = new ClipgenInfrastructureStack(app, 'ProdStack', {
       env: { account: '123456789012', region: 'us-east-1' }
     });
 

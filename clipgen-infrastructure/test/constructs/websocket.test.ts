@@ -55,7 +55,7 @@ describe('WebSocketConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::ApiGatewayV2::Api', {
-      Name: 'speechface-websocket',
+      Name: 'clipgen-websocket',
       ProtocolType: 'WEBSOCKET'
     });
   });
@@ -79,12 +79,12 @@ describe('WebSocketConstruct', () => {
     const functions = template.findResources('AWS::Lambda::Function');
     const functionNames = Object.values(functions)
       .map((fn: any) => fn.Properties?.FunctionName)
-      .filter(name => name?.startsWith('speechface-'));
+      .filter(name => name?.startsWith('clipgen-'));
 
-    expect(functionNames).toContain('speechface-ws-connect');
-    expect(functionNames).toContain('speechface-ws-disconnect');
-    expect(functionNames).toContain('speechface-ws-message');
-    expect(functionNames).toContain('speechface-stream-processor');
+    expect(functionNames).toContain('clipgen-ws-connect');
+    expect(functionNames).toContain('clipgen-ws-disconnect');
+    expect(functionNames).toContain('clipgen-ws-message');
+    expect(functionNames).toContain('clipgen-stream-processor');
   });
 
   test('creates WebSocket routes', () => {
@@ -119,7 +119,7 @@ describe('WebSocketConstruct', () => {
 
     const functions = template.findResources('AWS::Lambda::Function');
     const streamProcessor = Object.values(functions).find(
-      (fn: any) => fn.Properties?.FunctionName === 'speechface-stream-processor'
+      (fn: any) => fn.Properties?.FunctionName === 'clipgen-stream-processor'
     );
 
     expect(streamProcessor?.Properties?.Timeout).toBe(30);
@@ -135,7 +135,7 @@ describe('WebSocketConstruct', () => {
     
     // All WebSocket handlers should have code entries
     const wsHandlers = Object.values(functions).filter(
-      (fn: any) => fn.Properties?.FunctionName?.startsWith('speechface-ws-')
+      (fn: any) => fn.Properties?.FunctionName?.startsWith('clipgen-ws-')
     );
 
     wsHandlers.forEach((handler: any) => {
@@ -151,7 +151,7 @@ describe('WebSocketConstruct', () => {
     const functions = template.findResources('AWS::Lambda::Function');
     
     Object.values(functions).forEach((fn: any) => {
-      if (fn.Properties?.FunctionName?.startsWith('speechface-')) {
+      if (fn.Properties?.FunctionName?.startsWith('clipgen-')) {
         const envVars = fn.Properties.Environment?.Variables;
         expect(envVars).toBeDefined();
         expect(envVars).toHaveProperty('CONNECTION_TABLE_NAME');

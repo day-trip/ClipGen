@@ -19,7 +19,7 @@ describe('StorageConstruct', () => {
     const template = Template.fromStack(stack);
 
     template.hasResourceProperties('AWS::S3::Bucket', {
-      BucketName: 'speechface-media-123456789012-us-east-1',
+      BucketName: 'clipgen-media',
       PublicAccessBlockConfiguration: {
         BlockPublicAcls: true,
         BlockPublicPolicy: true,
