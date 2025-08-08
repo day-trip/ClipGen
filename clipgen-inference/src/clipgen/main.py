@@ -1,7 +1,5 @@
-import mochi.pipelines
-
 import asyncio
-from clipgen.mochi import MochiModel
+from clipgen.mochi_model import MochiModel
 
 async def main():
     model = MochiModel()
