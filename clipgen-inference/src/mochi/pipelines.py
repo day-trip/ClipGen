@@ -409,6 +409,7 @@ def sample_model(device, dit, conditioning, **args):
 
     # Euler sampler w/ customizable sigma schedule & cfg scale
     for i in get_new_progress_bar(range(0, sample_steps), desc="Sampling"):
+        print("SAMPLING")
         sigma = sigma_schedule[i]
         dsigma = sigma - sigma_schedule[i + 1]
 

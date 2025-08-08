@@ -44,6 +44,7 @@ def residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6):
         [N, D] output tensor
     """
     if _USE_CUDA_KERNEL:
+        print("USING THE KERNEL")
         return _optimized_rmsnorm(x, x_res, gate, eps)
     else:
         return residual_tanh_gated_rmsnorm_pytorch_fallback(x, x_res, gate, eps)
