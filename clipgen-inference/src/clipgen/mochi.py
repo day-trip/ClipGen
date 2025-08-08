@@ -9,7 +9,7 @@ import numpy as np
 import torch
 from huggingface_hub import hf_hub_download
 
-from model_interface import ModelInterface
+from clipgen.model_interface import ModelInterface
 from clipgen.coordinator import coordinate_pod_work
 from clipgen.util import dump_mochi_weights_info
 

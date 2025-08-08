@@ -427,6 +427,7 @@ def sample_model(device, dit, conditioning, **args):
         return out_uncond + cfg_scale * (out_cond - out_uncond)
 
     # Euler sampler w/ customizable sigma schedule & cfg scale
+    start_time = time.perf_counter()
     for i in get_new_progress_bar(range(0, sample_steps), desc="Sampling"):
         # Log progress every 20 steps for kubectl logs visibility
         if i % 20 == 0 or i == sample_steps - 1:
@@ -446,6 +447,9 @@ def sample_model(device, dit, conditioning, **args):
         z = z + dsigma * pred
 
     z = z[:B] if cond_batched else z
+
+    print(f"Sampling done! Time taken: {time.perf_counter() - start_time:.2f}s")
+
     return dit_latents_to_vae_latents(z)
 
 

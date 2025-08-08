@@ -7,15 +7,14 @@ import traceback
 from pathlib import Path
 from typing import Dict, Any
 
-from inference_engine import InferenceRequest, create_inference_engine
-from monitoring import GPUMonitor, setup_logging
+from clipgen.inference_engine import InferenceRequest, create_inference_engine
+from clipgen.monitoring import GPUMonitor, setup_logging
 from prometheus_client import Counter, Histogram, Gauge, start_http_server
 
 # Metrics
 JOBS_PROCESSED = Counter('jobs_processed_total', 'Total jobs processed', ['status'])
 PROCESSING_TIME = Histogram('job_processing_seconds', 'Time spent processing jobs')
 GPU_MEMORY_USAGE = Gauge('gpu_memory_used_bytes', 'GPU memory usage', ['gpu_id'])
-QUEUE_DEPTH = Gauge('sqs_queue_depth', 'Current SQS queue depth')
 
 logger = setup_logging()
 
@@ -64,9 +63,6 @@ class ClipgenWorker:
         # Start the Prometheus metrics server
         start_http_server(8000)
 
-        # Start GPU monitoring task
-        monitor_task = asyncio.create_task(self._monitor_loop())
-
         # Start the main processing loop
         try:
             print("Running processing loop...")
@@ -74,27 +70,6 @@ class ClipgenWorker:
         finally:
             monitor_task.cancel()
             await self.inference_engine.cleanup()
-
-    async def _monitor_loop(self):
-        """Background monitoring task"""
-        while self.running:
-            try:
-                # Update GPU metrics
-                gpu_stats = self.gpu_monitor.get_stats()
-                for gpu_id, stats in gpu_stats.items():
-                    GPU_MEMORY_USAGE.labels(gpu_id=gpu_id).set(stats['memory_used'])
-
-                # Update queue depth (approximate)
-                async with self.session.client('sqs') as sqs:
-                    queue_attrs = await sqs.get_queue_attributes(
-                        QueueUrl=self.config.queue_url,
-                        AttributeNames=['ApproximateNumberOfMessages']
-                    )
-                QUEUE_DEPTH.set(int(queue_attrs['Attributes']['ApproximateNumberOfMessages']))
-
-                await asyncio.sleep(10)  # Monitor every 10 seconds
-            except Exception as e:
-                logger.error(f"Monitoring error: {e}")
 
     async def _process_loop(self):
         """Main SQS processing loop"""
@@ -105,7 +80,6 @@ class ClipgenWorker:
                     continue
 
                 # Poll SQS asynchronously
-                print("POLLING: " + self.config.queue_url)
                 async with self.session.client('sqs') as sqs:
                     response = await sqs.receive_message(
                         QueueUrl=self.config.queue_url,

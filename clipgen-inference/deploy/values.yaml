@@ -1,6 +1,6 @@
 image:
   repository: 724133491284.dkr.ecr.us-east-1.amazonaws.com/clipgen
-  tag: v2
+  tag: v22
   pullSecrets:
     - name: aws-ecr-secret  # ECR credentials
 

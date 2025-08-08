@@ -1,0 +1,152 @@
+You’re right to focus on ff_block_x/ff_block_y. The fused op integration itself is fine, but two integration details around those calls are keeping Dynamo in “recompile city”:
+
+- The wrapper function does shape- and dtype-dependent branching to broadcast gate, which changes between callsites (x vs y blocks, 2D vs 3D, etc.). That leads to guard differences and recompiles.
+- Inputs to the compiled regions sometimes arrive with different strides/layouts across calls. Even with dynamic shapes, Dynamo will recompile when it sees different stride patterns unless you stabilize the layout.
+
+Make the fused-op call “boring” and stable every time
+The goal is: at the callsite, you always pass the same ranks and layout so Inductor can reuse a single compiled graph. Concretely:
+
+- Always pass gate with the singleton axis in place: for [..., D] inputs x and x_res, pass gate as [..., 1, D] (if x is 3D) or [N, D] (if x is 2D). Don’t let the wrapper guess.
+- Make x_res and the residual input contiguous once, just before the call.
+- Keep dtype constant (bf16) in the compiled path. Avoid in-wrapper dtype casts.
+
+Then simplify the wrapper to remove branches and casts.
+
+1) Simplify the Python wrapper (ops.py)
+Replace your current wrapper with this minimal, branch-free version. It assumes callers already made gate broadcastable to x’s shape and ensured bf16.
+
+import torch
+
+def fused_residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6, exact_mode=False):
+    """
+    Fused CUDA op:
+      - x, x_res: [..., D], bfloat16, CUDA
+      - gate: broadcastable to x.shape, bfloat16, CUDA
+    Returns: [..., D], bfloat16
+    """
+    if (not x.is_cuda) or x.dtype != torch.bfloat16:
+        # Eager fallback (fast and graph-friendly)
+        gate_b = torch.broadcast_to(gate, x.shape)
+        x_res_f = x_res.float()
+        scale = torch.rsqrt((x_res_f * x_res_f).mean(-1, keepdim=True) + eps)
+        x_normed = x_res_f * scale * torch.tanh(gate_b)
+        return x + x_normed.to(dtype=x.dtype)
+
+    # No branching: assume dtype and broadcastability already correct
+    D = x.size(-1)
+    gate_b = torch.broadcast_to(gate, x.shape)
+
+    x2   = x.reshape(-1, D).contiguous()
+    xr2  = x_res.reshape(-1, D).contiguous()
+    g2   = gate_b.reshape(-1, D).contiguous()
+
+    out2 = torch.ops.mochi.fused_residual_tanh_gated_rmsnorm(
+        x2, xr2, g2, float(eps), bool(exact_mode)
+    )
+    return out2.view_as(x)
+
+Notes:
+- We removed dtype casts and conditional broadcasting logic. Any variability there causes guards and recompiles.
+- We still keep a clean eager fallback for CPU/non-bf16.
+
+2) Make all callsites pass the gate in a stable broadcastable shape
+In ff_block_x/ff_block_y and the MSA residuals, always unsqueeze gate to match x’s rank.
+
+In AsymmetricJointBlock.forward:
+
+# After attention
+x_attn = x_attn.contiguous()
+if self.update_y:
+    y_attn = y_attn.contiguous()
+
+# Gates are [B, D]; x and y are [B, N, D] / [B, L, D]
+x = fused_residual_tanh_gated_rmsnorm(
+    x.contiguous(),                     # stabilize layout seen by compiler
+    x_attn,                             # already contiguous
+    gate_msa_x.unsqueeze(1),            # [B, 1, D] => broadcast over N
+    eps=1e-6, exact_mode=False,
+)
+if self.update_y:
+    y = fused_residual_tanh_gated_rmsnorm(
+        y.contiguous(),
+        y_attn,
+        gate_msa_y.unsqueeze(1),        # [B, 1, D] => broadcast over L
+        eps=1e-6, exact_mode=False,
+    )
+
+# MLP block
+x_mod = modulated_rmsnorm(x, scale_mlp_x.contiguous())
+x_res = self.mlp_x(x_mod).contiguous()
+x = fused_residual_tanh_gated_rmsnorm(
+    x.contiguous(),
+    x_res,
+    gate_mlp_x.unsqueeze(1),            # [B, 1, D]
+    eps=1e-6, exact_mode=False,
+)
+if self.update_y:
+    y_mod = modulated_rmsnorm(y, scale_mlp_y.contiguous())
+    y_res = self.mlp_y(y_mod).contiguous()
+    y = fused_residual_tanh_gated_rmsnorm(
+        y.contiguous(),
+        y_res,
+        gate_mlp_y.unsqueeze(1),        # [B, 1, D]
+        eps=1e-6, exact_mode=False,
+    )
+
+Why unsqueeze(1)?
+- Your inputs are [B, N, D] and gates are [B, D]. Rather than letting the wrapper “figure it out” (and recompiling when ranks differ), always insert the singleton dimension to get [B, 1, D]. That’s a consistent rank and allows gate_broadcast = broadcast_to(gate, x.shape) to be a single, stable op pattern.
+
+3) Stabilize layouts in prepare_qkv and returns
+A lot of stride mismatches come from permute, gather, and cat. Make those contiguous right after such ops, not later, so all downstream users see the same layout every time.
+
+In AsymmetricAttention.prepare_qkv, add contiguous in these places:
+
+- After qkv_x = self.qkv_x(x): qkv_x = qkv_x.contiguous()
+- After cp.all_to_all_collect_tokens: qkv_x = qkv_x.contiguous()
+- After cat/gather, before view: q, k, v = torch.cat(...).contiguous()
+- After view to (total, heads, head_dim): q = q.view(...).contiguous() and same for k, v
+- Also make scale_x/scale_y contiguous before modulated_rmsnorm to avoid stride guards.
+
+4) Don’t pass Python callables as data
+You removed ck, good. Passing bound methods into ck was causing “fn got deallocated” guards. Keep it that way for inference. If you need training checkpointing, gate it completely outside of compiled inference.
+
+5) Compile per-instance (optional but helps)
+Different instances of AsymmetricJointBlock have different module structures (update_y True vs False). Compile forward per instance in __init__, not at class-decorator level:
+
+# In AsymmDiTJoint.__init__ after building blocks/final_layer:
+if os.environ.get("COMPILE_DIT") == "1":
+    for block in self.blocks:
+        block.forward = torch.compile(block.forward, dynamic=True)
+    self.final_layer.forward = torch.compile(self.final_layer.forward, dynamic=True)
+
+This avoids the len(self._modules) guard tripping across instances.
+
+6) Global toggles that help and are safe for inference
+- Enable TF32 tensor cores for matmuls:
+  torch.set_float32_matmul_precision('high')
+- Increase Dynamo cache size while iterating:
+  torch._dynamo.config.cache_size_limit = 64
+
+7) Verify your fused op is in-graph and stable
+Turn on logging once:
+
+torch._logging.set_logs(dynamo=True, recompiles=True, guards=True, graph_code=True, output_code=True)
+
+Warm up one forward. Then check:
+- No more “fn got deallocated” entries.
+- No stride mismatch guard errors at the residual calls.
+- The printed FX/Inductor code contains a single call to torch.ops.mochi.fused_residual_tanh_gated_rmsnorm inside a larger fused graph.
+- After the first compile, subsequent forwards don’t trigger recompiles.
+
+Why this solves the “only slow when fused op is used” observation
+Before, your wrapper had control flow based on tensor ranks/dtypes and did the broadcasting inside. That changes between x and y paths and across layers, so Dynamo kept specializing and recompiling, which looks like “the fused kernel makes it slow.” By:
+- moving broadcasting responsibility to callsites in a uniform way (always unsqueeze(1) for [B, D] gates),
+- removing dtype conversions in the wrapper,
+- enforcing contiguous layouts once and consistently,
+you make the compiled region see the same op pattern and layout every call. The fused op stays in-graph as an extern call and does not trigger recompiles.
+
+If you still see recompiles:
+- Share the exact strides of x, x_res, and gate right before the fused-op call in both x and y blocks (print t.stride()). If they vary across forwards, add .contiguous() one layer earlier.
+- Run with TORCH_LOGS="recompiles,guards,graph_breaks" once and check if any remaining recompiles point to other helpers (e.g., run_attention). Apply the same “contiguous and stable rank” rules there.
+
+Once stabilized, performance should match or beat your “no-kernel” baseline without compile breaks.

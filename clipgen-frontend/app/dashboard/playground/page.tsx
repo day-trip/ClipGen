@@ -454,7 +454,7 @@ export default function PlaygroundPage() {
             console.error('WebSocket error:', error);
             setConnectionError('Connection lost. Attempting to reconnect...');
         },
-        shouldReconnect: () => true,
+        shouldReconnect: () => isGenerating,
         reconnectAttempts: 5,
         reconnectInterval: (attemptNumber) => {
             const interval = Math.min(Math.pow(2, attemptNumber) * 1000, 30000);

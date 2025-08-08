@@ -1,3 +1,12 @@
+[build-system]
+requires = [
+    "setuptools>=75.2.0",
+    "wheel",
+    "torch",
+    "pybind11"
+]
+build-backend = "setuptools.build_meta"
+
 [project]
 name = "clipgen-inference"
 version = "0.1.0"
@@ -27,3 +36,9 @@ dependencies = [
 flash = [
     "flash-attn>=2.6.3"
 ]
+
+[tool.setuptools.packages.find]
+where = ["src"]
+
+[tool.setuptools.package-dir]
+"" = "src"

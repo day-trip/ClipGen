@@ -74,6 +74,19 @@ class MochiDualGPUPipeline:
     ):
         print("Initializing Ray for multi-GPU setup")
 
+        # Configure PyTorch
+        torch.set_float32_matmul_precision('high')
+
+        torch._dynamo.config.cache_size_limit = 64
+
+        # Enable comprehensive torch.compile debugging
+        torch._logging.set_logs(
+            recompiles=True,      # Shows exactly what's causing recompilations
+            guards=True,          # Shows guard failures
+            graph_code=True,      # Shows the actual FX graphs being compiled
+            output_code=True,     # Shows generated code to verify custom ops
+        )
+
         # Configure Ray with explicit settings
         ray.init(num_gpus=2)
 

@@ -1,5 +1,4 @@
 # Stage 1: Builder
-# This stage has all the build tools needed to install complex Python packages.
 FROM nvidia/cuda:12.6.3-devel-ubuntu22.04 AS builder
 
 # Install system dependencies required for building
@@ -15,27 +14,31 @@ ENV UV_SYSTEM_PYTHON=1
 
 WORKDIR /app
 
-# Copy dependency files first for Docker layer caching
-COPY pyproject.toml uv.lock ./
+# Copy dependency files AND setup.py first for Docker layer caching
+COPY pyproject.toml uv.lock setup.py ./
 
 # Install dependencies into a virtual environment
-RUN uv sync --frozen --no-dev
-RUN uv pip install --no-cache-dir setuptools>=75.2.0 --python .venv/bin/python
-RUN uv pip install -e . --no-build-isolation --python .venv/bin/python
-# The [flash] extra likely pulls in dependencies that need the toolchain
-RUN uv pip install .[flash] --no-build-isolation --no-cache-dir --python .venv/bin/python
+RUN uv sync --frozen --no-dev --no-install-package torch
+RUN uv pip install --no-cache-dir setuptools>=75.2.0 pybind11 pip --python .venv/bin/python
+RUN uv pip install torch==2.6.0+cu126 --index-url https://download.pytorch.org/whl/cu126 --python .venv/bin/python
 
 # Copy source code into the builder stage
 COPY src/ ./src/
 
+# Set CUDA environment variables and install with CUDA support
+ENV CUDA_HOME=/usr/local/cuda \
+    PATH=/usr/local/cuda/bin:$PATH \
+    LD_LIBRARY_PATH=/usr/local/cuda/lib64:$LD_LIBRARY_PATH \
+    FORCE_CUDA=1
+
+# Now we can use pip since we installed it
+RUN ./.venv/bin/python -m pip install . --no-build-isolation -v
+RUN uv pip install .[flash] --no-build-isolation --no-cache-dir --python .venv/bin/python
 
 # --- Stage 2: Final Image ---
-# This stage creates the final, smaller image. We copy the built .venv
-# from the builder stage, but we MUST keep build-essential for torch.compile
 FROM nvidia/cuda:12.6.3-devel-ubuntu22.04
 
-# Install only the RUNTIME system dependencies.
-# build-essential and python3.10-dev ARE runtime dependencies for torch.compile
+# Install runtime dependencies
 RUN apt-get update && apt-get install -y --no-install-recommends \
     python3.10 python3.10-dev build-essential ffmpeg \
     && rm -rf /var/lib/apt/lists/*
@@ -49,11 +52,13 @@ COPY --from=builder /app/.venv ./.venv
 COPY --from=builder /app/src ./src
 
 # Set environment variables for the application
-# Note the corrected syntax for COMPILE_DIT
-ENV PYTHONPATH="/app/src" \
-    PYTHONUNBUFFERED=1 \
+ENV PYTHONUNBUFFERED=1 \
     PYTHONDONTWRITEBYTECODE=1 \
-    COMPILE_DIT="1"
+    COMPILE_DIT="1" \
+    CUDA_HOME=/usr/local/cuda \
+    PATH="/usr/local/cuda/bin:$PATH" \
+    LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH" \
+    TORCH_LOGS="recompiles,graph_breaks"
 
 EXPOSE 8000
 
