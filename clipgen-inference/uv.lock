@@ -1771,7 +1771,7 @@ wheels = [
 ]
 
 [[package]]
-name = "speechface-inference"
+name = "clipgen-inference"
 version = "0.1.0"
 source = { virtual = "." }
 dependencies = [

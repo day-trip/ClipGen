@@ -428,10 +428,10 @@ def sample_model(device, dit, conditioning, **args):
 
     # Euler sampler w/ customizable sigma schedule & cfg scale
     for i in get_new_progress_bar(range(0, sample_steps), desc="Sampling"):
-        # Log progress every 10 steps for kubectl logs visibility
-        if i % 10 == 0 or i == sample_steps - 1:
+        # Log progress every 20 steps for kubectl logs visibility
+        if i % 20 == 0 or i == sample_steps - 1:
             progress = (i + 1) / sample_steps * 100
-            print(f"⚡ Inference progress: {i+1}/{sample_steps} steps ({progress:.1f}%)")
+            print(f"Inference progress: {i+1}/{sample_steps} steps ({progress:.1f}%)")
         
         sigma = sigma_schedule[i]
         dsigma = sigma - sigma_schedule[i + 1]

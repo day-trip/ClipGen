@@ -27,7 +27,7 @@ class WorkerConfig:
         self.max_concurrent_jobs = int(os.environ.get('MAX_CONCURRENT_JOBS', '1'))
         self.gpu_devices = [int(x) for x in os.environ.get('CUDA_VISIBLE_DEVICES', '0,1').split(',')]
 
-class SpeechfaceWorker:
+class ClipgenWorker:
     def __init__(self, config: WorkerConfig):
         self.config = config
         self.running = True
@@ -69,6 +69,7 @@ class SpeechfaceWorker:
 
         # Start the main processing loop
         try:
+            print("Running processing loop...")
             await self._process_loop()
         finally:
             monitor_task.cancel()
@@ -104,6 +105,7 @@ class SpeechfaceWorker:
                     continue
 
                 # Poll SQS asynchronously
+                print("POLLING: " + self.config.queue_url)
                 async with self.session.client('sqs') as sqs:
                     response = await sqs.receive_message(
                         QueueUrl=self.config.queue_url,
@@ -262,9 +264,9 @@ class SpeechfaceWorker:
 
 async def main():
     config = WorkerConfig()
-    worker = SpeechfaceWorker(config)
+    worker = ClipgenWorker(config)
 
-    logger.info("Starting Speechface worker...")
+    logger.info("Starting Clipgen worker...")
     await worker.start()
 
 if __name__ == "__main__":
