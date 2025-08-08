@@ -87,7 +87,18 @@ def fused_residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6, exact_mode=False
         B, M, D = original_shape
         x_2d = x.view(B * M, D)
         x_res_2d = x_res.view(B * M, D)
-        gate_2d = gate.view(B * M)
+        
+        # Handle different gate shapes
+        if gate.shape == (B, D):
+            # Per-feature gate: repeat for each token (your CUDA kernel expects per-token gate)
+            # Use the mean of gate features as a single scalar per batch item, then repeat
+            gate_scalar = gate.mean(dim=-1, keepdim=True)  # [B, 1]
+            gate_2d = gate_scalar.expand(B, M).contiguous().view(B * M)  # [B*M]
+        elif gate.shape == (B, M):
+            # Per-token gate: flatten
+            gate_2d = gate.view(B * M)
+        else:
+            raise ValueError(f"Unsupported gate shape {gate.shape} for input shape {original_shape}")
         
         output_2d = FusedResidualTanhGatedRMSNorm.apply(x_2d, x_res_2d, gate_2d, eps, exact_mode)
         return output_2d.view(original_shape)
