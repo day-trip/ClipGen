@@ -8,9 +8,9 @@ ext_modules = []
 if torch.cuda.is_available():
     # Fused RMSNorm kernel
     fused_rmsnorm_ext = cpp_extension.CUDAExtension(
-        name='genmo.mochi.kernels._C.fused_rmsnorm',
+        name='mochi.kernels._C.fused_rmsnorm',
         sources=[
-            'src/genmo/mochi/kernels/cuda/fused_rmsnorm.cu',
+            os.path.join('src', 'mochi', 'kernels', 'cuda', 'fused_rmsnorm.cu'),
         ],
         extra_compile_args={
             'cxx': ['-O3'],
