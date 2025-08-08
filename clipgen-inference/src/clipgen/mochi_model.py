@@ -112,7 +112,7 @@ class MochiModel(ModelInterface):
 
         # Import Mochi pipeline components
         if USE_MULTI_GPU:
-            from mochi.pipelines import DecoderModelFactory, DitModelFactory, MochiMultiGPUPipeline
+            from mochi.pipelines import DecoderModelFactory, DitModelFactory
             from mochi.patches.encoder import BetterT5ModelFactory
             from mochi.patches.pipeline import MochiDualGPUPipeline
 
@@ -129,11 +129,10 @@ class MochiModel(ModelInterface):
 
             # Initialize Multi-GPU pipeline
             self.pipeline = await asyncio.to_thread(
-                MochiMultiGPUPipeline,
+                MochiDualGPUPipeline,
                 text_encoder_factory=text_encoder_factory,
                 dit_factory=dit_factory,
-                decoder_factory=decoder_factory,
-                world_size=2
+                decoder_factory=decoder_factory
             )
             print(f"Multi-GPU pipeline initialized with {len(gpu_devices)} GPUs")
         else:

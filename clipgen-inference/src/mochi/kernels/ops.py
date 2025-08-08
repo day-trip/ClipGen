@@ -108,6 +108,8 @@ def residual_tanh_gated_rmsnorm(x, x_res, gate, eps=1e-6):
         try:
             return fused_residual_tanh_gated_rmsnorm(x, x_res, gate, eps, exact_mode=False)
         except Exception as e:
+            print(f"DEBUG: CUDA kernel failed with error: {e}")
+            print(f"DEBUG: Input devices - x: {x.device}, x_res: {x_res.device}, gate: {gate.device}")
             warnings.warn(
                 f"CUDA kernel failed ({e}), falling back to PyTorch",
                 UserWarning,
