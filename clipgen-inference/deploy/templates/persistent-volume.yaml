@@ -21,7 +21,7 @@ spec:
         - key: kubernetes.io/hostname
           operator: In
           values:
-          - g094  # Only available on your GPU node
+          - {{ index .Values.nodeSelector "kubernetes.io/hostname" }}  # GPU node from values
 ---
 apiVersion: v1
 kind: PersistentVolumeClaim

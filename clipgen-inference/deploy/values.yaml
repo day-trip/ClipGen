@@ -1,6 +1,6 @@
 image:
   repository: 724133491284.dkr.ecr.us-east-1.amazonaws.com/clipgen
-  tag: v23
+  tag: v26
   pullSecrets:
     - name: aws-ecr-secret  # ECR credentials
 
@@ -11,14 +11,14 @@ aws:
   mediaBucketName: "clipgen-media"
 
 scaling:
-  minReplicas: 1 # Start with 1 for testing
+  minReplicas: 2 # Start with 1 for testing
   maxReplicas: 4
   queueLength: "2"
 
 # Set to {} to disable node selection for testing on any available node.
 # Or specify the correct hostname for your GPU node.
 nodeSelector:
-  kubernetes.io/hostname: g094
+  kubernetes.io/hostname: g229
 
 resources:
   requests:

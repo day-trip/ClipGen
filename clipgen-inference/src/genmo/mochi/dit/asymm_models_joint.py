@@ -29,19 +29,10 @@ from genmo.mochi.dit.utils import (
     modulate,
     pad_and_split_xy,
 )
-from genmo.mochi.kernels.ops import fused_residual_tanh_gated_rmsnorm
 from genmo.mochi.util.attn_imports import flash_varlen_attn, sage_attn, sdpa_attn_ctx
 
 COMPILE_FINAL_LAYER = os.environ.get("COMPILE_DIT") == "1"
 COMPILE_MMDIT_BLOCK = os.environ.get("COMPILE_DIT") == "1"
-
-
-def ck(fn, *args, enabled=True, **kwargs) -> torch.Tensor:
-    # Always disable checkpointing during inference for torch.compile compatibility
-    if enabled and torch.is_grad_enabled():
-        return torch.utils.checkpoint.checkpoint(fn, *args, **kwargs, use_reentrant=False)
-
-    return fn(*args, **kwargs)
 
 
 class AsymmetricAttention(nn.Module):
@@ -124,11 +115,9 @@ class AsymmetricAttention(nn.Module):
         # Process visual features
         x = modulated_rmsnorm(x, scale_x)  # (B, M, dim_x) where M = N / cp_group_size
         qkv_x = self.qkv_x(x)  # (B, M, 3 * dim_x)
-        qkv_x = qkv_x.contiguous()
         assert qkv_x.dtype == torch.bfloat16
 
         qkv_x = cp.all_to_all_collect_tokens(qkv_x, self.num_heads)  # (3, B, N, local_h, head_dim)
-        qkv_x = qkv_x.contiguous()
 
         # Split qkv_x into q, k, v
         q_x, k_x, v_x = qkv_x.unbind(0)  # (B, N, local_h, head_dim)
@@ -159,13 +148,13 @@ class AsymmetricAttention(nn.Module):
             q_y, k_y, v_y = self.run_qkv_y(y)  # (B, L, local_heads, head_dim)
 
             indices = valid_token_indices[:, None].expand(-1, D)
-            q = torch.cat([q_x, q_y], dim=1).view(-1, D).gather(0, indices).contiguous()  # (total, D)
-            k = torch.cat([k_x, k_y], dim=1).view(-1, D).gather(0, indices).contiguous()  # (total, D)
-            v = torch.cat([v_x, v_y], dim=1).view(-1, D).gather(0, indices).contiguous()  # (total, D)
+            q = torch.cat([q_x, q_y], dim=1).view(-1, D).gather(0, indices)  # (total, D)
+            k = torch.cat([k_x, k_y], dim=1).view(-1, D).gather(0, indices)  # (total, D)
+            v = torch.cat([v_x, v_y], dim=1).view(-1, D).gather(0, indices)  # (total, D)
 
-        q = q.view(-1, num_heads, head_dim).contiguous()
-        k = k.view(-1, num_heads, head_dim).contiguous()
-        v = v.view(-1, num_heads, head_dim).contiguous()
+        q = q.view(-1, num_heads, head_dim)
+        k = k.view(-1, num_heads, head_dim)
+        v = v.view(-1, num_heads, head_dim)
         return q, k, v
 
     @torch.autocast("cuda", enabled=False)
@@ -447,60 +436,30 @@ class AsymmetricJointBlock(nn.Module):
             **attn_kwargs,
         )
 
-        x_attn = x_attn.contiguous()
-        if self.update_y:
-            y_attn = y_attn.contiguous()
-
         assert x_attn.size(1) == N
+        x = residual_tanh_gated_rmsnorm(x, x_attn, gate_msa_x)
 
-        # Gates are [B, D]; x and y are [B, N, D] / [B, L, D]
-        x = fused_residual_tanh_gated_rmsnorm(
-            x.contiguous(),                     # stabilize layout seen by compiler
-            x_attn,                             # already contiguous
-            gate_msa_x.unsqueeze(1),            # [B, 1, D] => broadcast over N
-            eps=1e-6, exact_mode=False,
-        )
         if self.update_y:
-            y = fused_residual_tanh_gated_rmsnorm(
-                y.contiguous(),
-                y_attn,
-                gate_msa_y.unsqueeze(1),        # [B, 1, D] => broadcast over L
-                eps=1e-6, exact_mode=False,
-            )
+            y = residual_tanh_gated_rmsnorm(y, y_attn, gate_msa_y)
 
         # MLP block.
-        x_mod = modulated_rmsnorm(x, scale_mlp_x.contiguous())
-        x_res = self.mlp_x(x_mod).contiguous()
-        x = fused_residual_tanh_gated_rmsnorm(
-            x.contiguous(),
-            x_res,
-            gate_mlp_x.unsqueeze(1),            # [B, 1, D]
-            eps=1e-6, exact_mode=False,
-        )
+        x = self.ff_block_x(x, scale_mlp_x, gate_mlp_x)
         if self.update_y:
-            y_mod = modulated_rmsnorm(y, scale_mlp_y.contiguous())
-            y_res = self.mlp_y(y_mod).contiguous()
-            y = fused_residual_tanh_gated_rmsnorm(
-                y.contiguous(),
-                y_res,
-                gate_mlp_y.unsqueeze(1),        # [B, 1, D]
-                eps=1e-6, exact_mode=False,
-            )
+            y = self.ff_block_y(y, scale_mlp_y, gate_mlp_y)
 
         return x, y
 
-    # Replaced by my `fused_residual_tanh_gated_rmsnorm` for now (testing)
-    # def ff_block_x(self, x, scale_x, gate_x):
-    #     x_mod = modulated_rmsnorm(x, scale_x)
-    #     x_res = self.mlp_x(x_mod)
-    #     x = residual_tanh_gated_rmsnorm(x, x_res, gate_x)  # Sandwich norm
-    #     return x
-    #
-    # def ff_block_y(self, y, scale_y, gate_y):
-    #     y_mod = modulated_rmsnorm(y, scale_y)
-    #     y_res = self.mlp_y(y_mod)
-    #     y = residual_tanh_gated_rmsnorm(y, y_res, gate_y)  # Sandwich norm
-    #     return y
+    def ff_block_x(self, x, scale_x, gate_x):
+        x_mod = modulated_rmsnorm(x, scale_x)
+        x_res = self.mlp_x(x_mod)
+        x = residual_tanh_gated_rmsnorm(x, x_res, gate_x)  # Sandwich norm
+        return x
+
+    def ff_block_y(self, y, scale_y, gate_y):
+        y_mod = modulated_rmsnorm(y, scale_y)
+        y_res = self.mlp_y(y_mod)
+        y = residual_tanh_gated_rmsnorm(y, y_res, gate_y)  # Sandwich norm
+        return y
 
 
 @torch.compile(disable=not COMPILE_FINAL_LAYER)

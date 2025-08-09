@@ -11,6 +11,7 @@ COPY --from=ghcr.io/astral-sh/uv:latest /uv /bin/uv
 
 # Set uv to use system Python
 ENV UV_SYSTEM_PYTHON=1
+ENV TORCH_CUDA_ARCH_LIST="9.0"
 
 WORKDIR /app
 
@@ -57,8 +58,7 @@ ENV PYTHONUNBUFFERED=1 \
     COMPILE_DIT="1" \
     CUDA_HOME=/usr/local/cuda \
     PATH="/usr/local/cuda/bin:$PATH" \
-    LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH" \
-    TORCH_LOGS="recompiles,graph_breaks"
+    LD_LIBRARY_PATH="/usr/local/cuda/lib64:$LD_LIBRARY_PATH"
 
 EXPOSE 8000
 
